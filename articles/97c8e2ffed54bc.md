@@ -3,7 +3,7 @@ title: "Nagoya Web3 Hackathon に参加して賞4つ取ってきた話"
 emoji: "☀️"
 type: "idea" # tech: 技術記事 / idea: アイデア
 topics: ["web3", "hackathon", "graphql", "react", "metamask"]
-published: false
+published: true
 ---
 
 こんにちは。かろっくです。
