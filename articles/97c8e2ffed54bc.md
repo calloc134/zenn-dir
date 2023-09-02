@@ -76,7 +76,7 @@ https://speakerdeck.com/calloc134/webkai-fa-monoripoboirapuretowoqu-wei-degorigo
 結果として、ボイラープレート自体の修正は二日ほどで終わらせ、その後の残りの時間でプロダクトの開発を進めることができました。
 
 バックエンドとフロントエンドのロジックは自分が実装し、チャット部分のUIとプレゼンはさたけさんが実装してくれました。
-チャット部分のUIは自分が実装したときと比べて、全く違うものになっていて、とても驚きました。
+チャット部分のUIは自分が突貫工事で実装したときと比べて、全く違うものになっていて、とても驚きました。
 
 ![](/images/97c8e2ffed54bc/2023-09-02-21-57-48.png)
 
@@ -93,8 +93,12 @@ https://twitter.com/calloc134/status/1692915108312424483
 https://www.canva.com/design/DAFr5zQZEqE/JCytQIbRq7DFTamA-09png/view?utm_content=DAFr5zQZEqE&utm_campaign=designshare&utm_medium=link&utm_source=publishsharelink
 
 
-プレゼンがプロみたいで、とてもかっこいいです。
+プレゼンがプロのようで、とてもかっこいいです。
 ![](/images/97c8e2ffed54bc/2023-09-02-21-58-52.png)
+
+![](/images/97c8e2ffed54bc/2023-09-02-22-14-14.png)
+
+![](/images/97c8e2ffed54bc/2023-09-02-22-14-32.png)
 
 アプリ内部でmetamaskと連携し、送金が出来るようになっています。
 ![](/images/97c8e2ffed54bc/2023-09-02-22-00-09.png)
