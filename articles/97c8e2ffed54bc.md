@@ -37,7 +37,7 @@ https://twitter.com/calloc134/status/1689537757730017280
 https://twitter.com/NagoyaU_Web3/status/1690539552849760256
 
 キックオフが行われ、ハッカソンの概要やルールなどが説明されました。
-ここでyukiさんより、Web3技術についての講義が行われました。
+ここでyukiさん(https://twitter.com/stand_english)より、Web3技術についての講義が行われました。
 https://twitter.com/hadanoyuya/status/1690587409652826112
 
 Web3技術について、自分はビットコインの最低限の仕組みなどは知っていましたが、イーサリアムやSolidityなどの知識は全くありませんでした。
