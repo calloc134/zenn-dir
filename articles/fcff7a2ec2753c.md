@@ -182,6 +182,7 @@ bootstrap();
 ```ts
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "src/prisma.module";
+import { hash } from "argon2";
 
 @Injectable()
 export class UserService {
@@ -191,7 +192,7 @@ export class UserService {
     const user = await this.prisma.user.create({
       data: {
         name,
-        password: await argon2.hash(password),
+        password: await hash(password),
       },
     });
     return new UserResponse(user);
