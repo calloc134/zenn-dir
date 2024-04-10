@@ -3,7 +3,7 @@ title: "Manjaro Linuxでしあわせ環境を構築する"
 emoji: "🐧"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["manjaro", "wezterm", "zsh", "neovim", "starship"]
-published: false
+published: true
 ---
 
 # はじめに
