@@ -243,7 +243,7 @@ sudo pacman -S sheldon
 .zshrc に設定を追加します。
 
 ```bash
-echo export ZSH="$HOME/.local/share/sheldon/repos/github.com/ohmyzsh/ohmyzsh" >> ~/.zshrchoge
+echo export ZSH="$HOME/.local/share/sheldon/repos/github.com/ohmyzsh/ohmyzsh" >> ~/.zshrc
 echo 'eval "$(sheldon source)"' >> ~/.zshrc
 ```
 
@@ -256,7 +256,7 @@ sheldon init
 その後、作成されたファイルを編集します。
 
 ```bash
-nvim ~/.config/sheldon/cplugins.toml
+nvim ~/.config/sheldon/plugins.toml
 ```
 
 以下の内容を追加します。
@@ -359,12 +359,12 @@ sudo pacman -S wezterm
 
 ```bash
 sudo mkdir .config/wezterm
-nvim .config/wezterm/wezterm.toml
+nvim .config/wezterm/wezterm.lua
 ```
 
 以下の内容を追加します。
 
-```lua .config/wezterm/wezterm.toml
+```lua .config/wezterm/wezterm.lua
 local wezterm = require 'wezterm';
 wezterm.on('gui-startup', function(cmd)
     local tab, pane, window = wezterm.mux.spawn_window(cmd or {})
