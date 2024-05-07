@@ -167,10 +167,10 @@ yay -S whitesur-gtk-theme whitesur-icon-theme
 fcitx5 のツール群を導入し、日本語入力を設定します。
 
 ```bash
-sudo pacman -S fcitx5-im
+sudo pacman -S fcitx5 fcitx5-mozc fcitx5-gtk fcitx5-qt fcitx5-configtool
 ```
 
-このコマンドによって、以下のパッケージが導入されます。
+このコマンドでインストールされるパッケージは以下の通りです。
 
 - fcitx5: 日本語入力を行うためのフレームワーク
 - fcitx5-mozc: 日本語入力を行うためのエンジン
@@ -178,6 +178,14 @@ sudo pacman -S fcitx5-im
 - fcitx5-qt: Qt アプリケーションでの日本語入力を行うためのプラグイン
 - fcitx5-configtool: fcitx5 の設定を行うための GUI ツール
 
+:::message
+
+fcitx5-mozc の代わりに、fcitx5-mozc-ut というパッケージをインストールすることもできます。
+
+mozc-ut とは、Mozc のユーザ辞書を大幅に拡張したパッケージです。
+これを導入することで、予測変換がより賢くなり、利便性の向上が期待できます。
+
+:::
 次に、環境変数の設定を行います。
 
 ```bash
