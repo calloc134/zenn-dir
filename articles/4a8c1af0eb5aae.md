@@ -1,10 +1,9 @@
 ---
 title: "SQLに対するバックエンドのアプローチ比較、そしてSafeQLの紹介"
-# 象
 emoji: "🐘"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["SQL", "TypeScript", "SafeQL", "PostgreSQL", "ORM"]
-published: false
+published: true
 ---
 
 ## はじめに
@@ -17,6 +16,8 @@ DB と接続してデータのやり取りを行う必要がありますが、�
 ORM やクエリビルダを利用したり、逆に SQL を記述してコード生成を行ったりと、様々な方法があります。
 
 今回はこれらのアプローチについて比較し、比較的斬新な方針を取っているものとして SafeQL を紹介します。
+
+https://safeql.dev/
 
 ### 注意点
 
@@ -338,6 +339,8 @@ https://x.com/dmikurube/status/1789160173757677742
 - SQL ファイルを利用するため、既存の SQL をそのまま利用できる
 - コード生成により、型安全性が担保される
 
+また余談ですが、ORM を記述している頃は生の SQL が書けないという後ろめたさがありました。このような感情への対処法として、SQL をそのまま記述する方法は有用であると考えられます。
+
 #### デメリット
 
 - コード生成の手間がかかる
@@ -361,12 +364,290 @@ SafeQL は、コード内部で SQL を記述し、これに対して型を付�
 分類的には後者のアプローチ(記述した SQL に機能を後付ける方法)に該当します。
 しかし、書き心地としては前者のアプローチのように型を付けられ、構成ファイルを記述する必要がなく、使い勝手が良いと考えられます。
 
+なお、対応している DB は PostgreSQL のみです。
+また、SafeQL は eslint ルールとして実装されるため、eslint の導入が必須となっています。
+クエリの解析は実際に DB にアクセスして行われます。
+
 ### 使ってみる
+
+SafeQL は単に SQL クエリに型が付くだけなので、マイグレーション周りは別途のライブラリを利用する必要があります。
+ここは、SQL ファイルを記述してコード生成する方法と同じです。
+
+今回はマイグレーションの手間を省くため、そのまま SQL を実行します。
+ローカルで Postgres を起動します。なお、接続 URL は`postgresql://localhost:5432/postgres`です。
+
+```bash
+psql -h localhost -p 5432 -U postgres
+```
+
+```sql
+CREATE DATABASE "safeql-test";
+\c safeql-test
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL
+);
+```
+
+ここから解説する内容は以下のリポジトリに記述されています。
+
+https://github.com/calloc134/safeql-postgres-js
+
+次に、SafeQL をインストールします。今回は pnpm を利用しています。
+
+```bash
+pnpm install -D @ts-safeql/eslint-plugin libpg-query
+```
+
+次に、`eslint.config.mjs`を以下のように記述します。
+
+```javascript
+import safeql from "@ts-safeql/eslint-plugin/config";
+import tseslint from "typescript-eslint";
+
+export default tseslint.config(
+  ...tseslint.configs.recommended,
+  safeql.configs.connections({
+    databaseUrl:
+      "postgresql://postgres@localhost:5432/safeql-test?sslmode=disable", // 接続先の URL
+    targets: [{ tag: "sql", transform: "{type}[]" }],
+  })
+);
+```
+
+最後に、`src/index.ts`に以下のように記述します。
+
+```typescript
+import postgres from "postgres";
+
+const main = async () => {
+  const sql = postgres(
+    "postgresql://postgres@localhost:5432/safeql-test?sslmode=disable"
+  );
+
+  const result = await sql`SELECT id, name FROM users WHERE id = ${1}`;
+  console.log(result);
+};
+
+main();
+```
+
+ここまで記述すると、SafeQL によって以下のように型の提案が行われます。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-13-52.png)
+
+では、`Fix this @ts-safeql/check-sql problem`を選択します。
+すると、自動的にジェネリクスに対して型が付与されます。
+
+```typescript
+import postgres from "postgres";
+
+const main = async () => {
+  const sql = postgres(
+    "postgresql://postgres@localhost:5432/safeql-test?sslmode=disable"
+  );
+
+  const result = await sql<
+    { id: number; name: string }[]
+  >`SELECT id, name FROM users WHERE id = ${1}`;
+  console.log(result);
+};
+
+main();
+```
 
 ### 色々なクエリを試してみる
 
+色々なクエリを試してみます。
+
+#### 基本的なクエリ
+
+`select * `を試してみると、すべてのカラムのフィールドが提案されます。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-19-24.png)
+
+存在しないカラムを指定すると、エラーが発生します。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-21-28.png)
+
+#### 型とキャストについて
+
+TypeScript における number 型に対して、PostgreSQL の integer 型が対応します。
+また、TypeScript における string 型に対して、PostgreSQL の text 型が対応します。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-22-47.png)
+
+PostgreSQL においては uuid 型が存在しますが、TypeScript には存在しないため、where 句で uuid 型の指定を string 型で行うとエラーが発生します。
+
+試してみましょう。
+
+```sql
+CREATE TABLE users2 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL
+);
+```
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-31-16.png)
+
+では、`::uuid`を指定してキャストしてみます。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-32-28.png)
+
+エラーが発生しなくなりました。
+
+また、レスポンスについてもキャストが可能です。
+この場合は、キャストされた型が提案されます。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-22-04.png)
+
+#### INSERT/UPDATE/DELETE
+
+INSERT/UPDATE/DELETE についても型が提案されます。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-36-01.png)
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-37-05.png)
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-37-18.png)
+
+PostgreSQL においては、RETURNING 句を利用することで、更新後のレコードを取得することができます。
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-35-42.png)
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-36-49.png)
+
+#### JOIN
+
+JOIN についても試してみます。
+
+```sql
+CREATE TABLE posts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  title TEXT NOT NULL
+);
+```
+
+以下のクエリを記述します。
+
+```sql
+SELECT users.id AS user_id, users.name, posts.id AS post_id, posts.title FROM users JOIN posts ON users.id = posts.user_id;
+```
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-42-46.png)
+
+しっかりと型が提案されました。
+
+次に、LEFT JOIN を試してみます。
+
+```sql
+SELECT users.id AS user_id, users.name, posts.id AS post_id, posts.title FROM users LEFT JOIN posts ON users.id = posts.user_id;
+```
+
+![](/images/4a8c1af0eb5aae/2024-08-31-15-43-25.png)
+
+LEFT JOIN の場合は、post_id と title に null が許容されることが提案されました。
+
+このように、JOIN についてもしっかりと型が提案されます。
+
+### 注意点
+
+まだ少し不安定な部分があり、型に null が含まれて出力されることがあります。
+この場合、VSCode を再起動することで正確な型が生成されるようになる場合が多いです。
+テーブルのスキーマ定義を変更した後は、VSCode を再起動することをおすすめします。
+
+## 考えられる SafeQL の良さ
+
+筆者が考える SafeQL の良さは以下のとおりです。
+
+- 型安全性が担保される
+- コード内部にクエリを記述でき、コロケーションを保つことができる
+- 設定ファイルを記述する必要がない
+- 薄いラッパーで提供され、依存が少ない
+- SQL をそのまま記述できる
+- コード生成の手間がかからない
+
+ここで、前半 2 つについては SQL 隠蔽サイドのメリットを、後半の 4 つについては SQL 生成サイドのメリットを持っていると言えます。
+
+では、解説していきます。
+
+### 型安全性が担保される
+
+SafeQL は、SQL を記述する際に型を付けることができます。
+これにより、実行時エラーを減らすことができ、安全に SQL を記述することができます。
+
+### コード内部にクエリを記述でき、コロケーションを保つことができる
+
+コード生成アプローチを利用する場合、SQL ファイルを分離することが多いです。
+この考え方について、前述の通り賛否両論が存在します。
+しかし、筆者の考えでは、コロケーションの考えを重視することが重要であると考えます。
+https://kentcdodds.com/blog/colocation
+https://www.mizdra.net/entry/2022/12/11/203940
+
+コロケーションとは、フロントエンドの開発でよく用いられる概念であり、以下の原則で説明されます。
+
+> Place code as close to where it's relevant as possible.(コードをできるだけ関連する場所に配置しなさい。)
+
+この原則は、バックエンドの開発においても有効であると考えられます。
+クエリというものはアプリケーションのロジックと密結合であり、コード内部に記述することで、コードの可読性が向上すると考えます。
+
+SafeQL を利用することで、コード内部にクエリを記述できるというのは、メリットであると思います。
+
+### 設定ファイルを記述する必要がない
+
+コード生成アプローチを利用する場合、分離している SQL ファイルを指定するため、設定ファイルを記述する必要があります。
+SafeQL ではコード内に SQL を記述するため、設定ファイルを記述する必要がありません。
+単純に SQL を記述するだけで、型を付ける手軽さがあります。
+
+### 薄いラッパーで提供され、依存が少ない
+
+SafeQL は、薄いラッパーで提供されています。
+
+Postgres.js を利用する場合は、そもそも SafeQL が本番環境にインストールせずに動作し、依存を持たないことができます。
+本番環境に余計なライブラリが入らないのは、セキュリティやパフォーマンスの観点からも望ましいです。
+
+参考に、Postgres.js を利用した場合の依存関係は以下の通りです。
+
+```json
+...
+  "devDependencies": {
+    "@ts-safeql/eslint-plugin": "^3.4.1",
+    "libpg-query": "15.2.0-rc.deparse.3",
+    "tsx": "^4.19.0",
+    "typescript-eslint": "^8.3.0"
+  },
+  "dependencies": {
+    "postgres": "^3.4.4",
+    "typescript": "^5.5.4"
+  }
+  ...
+```
+
+なお、特性としてマイグレーション周りは別途のライブラリを利用する形となります。
+筆者の環境では dbmate を利用しています。
+
+### SQL をそのまま記述できる
+
+sql タグとして記述された SQL は、そのまま SQL として実行されます。
+これにより、ORM などのライブラリで提供されるメソッドを覚える必要がなく、SQL をそのまま記述することができます。
+
+### コード生成の手間がかからない
+
+コード生成アプローチを利用する場合、コマンドの実行の手間がかかります。
+SafeQL ではコード内に SQL を記述するため、コード生成の手間がかかりません。
+
+:::message
+コード生成アプローチは watch オプションを提供していることが多く、watch モードを利用することでコード生成の手間を減らすことができます。
+:::
+
 ## まとめ
 
-```;
+バックエンド開発において、DB へのクエリは必須です。
+クエリの方法については様々なアプローチがあり、年々新しい技術が登場し、実装も豊かになってきています。
 
-```
+今回はこれらのアプローチを比較し、面白いと思われるアプローチの一つである SafeQL を紹介しました。
+
+この機会に是非知っていただけたら嬉しいです。
+
+最後まで読んでいただきありがとうございました。
