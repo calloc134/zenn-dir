@@ -1,5 +1,5 @@
 ---
-title: "SQLに対するバックエンドのアプローチ比較、そしてSafeQLのやり方"
+title: "SQLに対するバックエンドのアプローチ比較、そしてSafeQLの紹介"
 # 象
 emoji: "🐘"
 type: "tech" # tech: 技術記事 / idea: アイデア
@@ -26,6 +26,10 @@ Go や Python など他の言語での利用方法については、別途調査
 ## SQL に対するアプローチ
 
 まず、SQL に対するアプローチには大きく分けて 2 つの方法があります。
+それぞれのライブラリの使い方を、簡単に見ていきましょう。
+
+なお、それぞれの例については簡易的なものとなっています。
+参照したドキュメントについてリンクを掲載しているため、詳細はそちらを参照してください。
 
 ### SQL を覆い隠す方法
 
@@ -85,7 +89,7 @@ https://www.prisma.io/docs/orm/prisma-client/queries/crud#read
 
 #### Drizzle ORM
 
-Drizzle ORM では、TypeScript 形式でスキーマを記述します。
+Drizzle ORM では、TypeScript のオブジェクトとしてスキーマを記述します。
 
 ```typescript
 import { integer, pgTable, serial, text } from "drizzle-orm/pg-core";
@@ -154,12 +158,42 @@ SQL ファイルとして別途クエリを記述し、これに対してコー�
 - sqlc
 - TypedSQL
 
-これらのライブラリでは、記述された SQL ファイルをクエリパーサで解析し、TypeScript の型定義を生成します。
+これらのライブラリでは、記述された SQL ファイルを外部・DB のクエリパーサで解析し、TypeScript の型定義を生成します。
 
-まず、sql ファイルに呼び出したいクエリを記述します。
-次に、構成ファイルに sql ファイルのパスを記述し、コード生成を行います。
+使い方のフローとしては以下のとおりです。
 
-sqlc の場合、以下のように構成ファイルを記述します。
+- SQL ファイルを記述する
+- 設定ファイルを記述する
+- コード生成を行い、型定義を生成する
+- 生成された型定義を利用してクエリを実行する
+
+では、それぞれのライブラリについて使い方を解説していきます。
+
+#### sqlc
+
+まず、以下のような SQL ファイルを記述します。
+
+schema.sql というファイルに、スキーマ定義を記述します。
+
+```sql
+CREATE TABLE authors (
+  id   BIGSERIAL PRIMARY KEY,
+  name text      NOT NULL,
+  bio  text
+);
+```
+
+また、query.sql というファイルに、アプリケーション内で呼び出すクエリを記述します。
+
+```sql
+-- name: GetAuthor :one
+SELECT * FROM authors
+WHERE id = $1 LIMIT 1;
+```
+
+https://github.com/sqlc-dev/sqlc-gen-typescript/tree/main/examples/authors/postgresql
+
+次に、以下のような sqlc.yaml ファイルに設定を記述します。
 
 ```yaml
 version: "2"
@@ -184,23 +218,7 @@ sql:
 
 https://github.com/sqlc-dev/sqlc-gen-typescript/tree/main#configuration
 
-TypedSQL の場合、ORM で紹介した Prisma と連携して提供されるため、Prisma に設定を記述します。
-
-```schema.prisma
-generator client {
-  provider = "prisma-client-js"
-  previewFeatures = ["typedSql"]
-}
-```
-
-https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/typedsql
-
-なお、TypedSQL の場合、`prisma/sql/`ディレクトリに sql ファイルを配置します。
-また、sqlc の場合はスキーマファイルも必要です。TypedSQL の場合は Prisma のスキーマが参照されるため不要です。
-
-それぞれ、コード生成のコマンドを実行することで、型付きのクエリを生成することができます。
-
-sqlc の場合、以下のコマンドとなります。
+設定ファイルを記述したら、以下のコマンドを実行してコード生成を行います。
 
 ```bash
 sqlc generate
@@ -208,15 +226,7 @@ sqlc generate
 
 https://github.com/sqlc-dev/sqlc-gen-typescript/tree/main#generating-code
 
-TypedSQL の場合、以下のコマンドとなります。
-
-```bash
-prisma generate --sql
-```
-
 生成されたクエリは、以下のように利用します。
-
-sqlc の場合
 
 ```typescript
 import postgres from "postgres";
@@ -237,7 +247,39 @@ console.log(seal);
 
 https://github.com/sqlc-dev/sqlc-gen-typescript/tree/main#using-generated-code
 
-TypedSQL の場合
+#### TypedSQL
+
+TypedSQL は、Prisma と連携して提供されるライブラリです。
+スキーマは Prisma のスキーマを利用するため、クエリのみを記述します。
+
+```sql
+SELECT u.id, u.name, COUNT(p.id) as "postCount"
+FROM "User" u
+LEFT JOIN "Post" p ON u.id = p."authorId"
+GROUP BY u.id, u.name
+```
+
+この SQL ファイルは`prisma/sql/`ディレクトリに配置します。
+
+次に、設定ファイルを記述します。
+TypedSQL の場合、ORM で紹介した Prisma と連携して提供されるため、Prisma に設定を記述します。
+
+```schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["typedSql"]
+}
+```
+
+https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/typedsql
+
+設定ファイルを記述したら、以下のコマンドを実行してコード生成を行います。
+
+```bash
+prisma generate --sql
+```
+
+生成されたクエリは、以下のように利用します。
 
 ```typescript
 import { PrismaClient } from "@prisma/client";
@@ -249,42 +291,22 @@ const usersWithPostCounts = await prisma.$queryRawTyped(getUsersWithPosts());
 console.log(usersWithPostCounts);
 ```
 
-なお、sqlc で生成されたクエリは以下のようになります。
-
-```typescript
-import { Sql } from "postgres";
-
-export async function getAuthor(
-  sql: Sql,
-  args: GetAuthorArgs
-): Promise<GetAuthorRow | null> {
-  const rows = await sql.unsafe(getAuthorQuery, [args.id]).values();
-  if (rows.length !== 1) {
-    return null;
-  }
-  const row = rows[0];
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row[0],
-    name: row[1],
-    bio: row[2],
-  };
-}
-```
-
 ## アプローチの比較
-
-この 2 つのアプローチは、対象的な特徴を持っています。
-
-https://x.com/dmikurube/status/1789160173757677742
 
 前者のアプローチは、SQL を覆い隠すことで便利に扱うというものです。
 これに対し後者のアプローチは、SQL をそのまま記述し、そこから便利な機能を後付けするというものです。
+
+https://x.com/dmikurube/status/1789160173757677742
+
+> いかにして SQL を隠蔽するか
+> その最右翼が今出てきてる自然言語からのクエリ生成
+
+> 隠蔽は隠蔽でかゆいところに手が届かない
+> 生成される SQL をグッと睨みながら ORM なりのご機嫌をうかがわないとならなかったりするので、生成するのが最右翼なら、逆サイドの左翼に「手で書いた SQL を解析してコードの方に合わさせる (sqlc とか)」のが来つつある
+
 それぞれのアプローチには、メリットとデメリットがあります。
 
-### SQL を隠蔽する方法
+### SQL を覆い隠す方法
 
 #### 特徴
 
