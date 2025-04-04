@@ -35,13 +35,13 @@ VakKarma は、「ゼロちゃんねるプラス」をベースにした 2 ち�
 > 『ぜろちゃんねるプラス』は２ちゃんねる互換スレッドフロート型掲示板スクリプトの『ぜろちゃんねる』をより２ちゃんねるに近いものにするとともに、よりよい機能を追加していき、ぜろちゃんねるの上位版として提供していくプロジェクトです。
 > https://ja.osdn.net/projects/zerochplus/releases/77053
 
-Vakkarma は、このゼロちゃんねるプラスの UI を参考にしつつ、最新の Web 開発技術で再構築されています。伝統的な 2 ちゃんねる風の UI ながら、現代のブラウザやデバイスで快適に利用できるように設計されています。
+VakKarma は、このゼロちゃんねるプラスの UI を参考にしつつ、最新の Web 開発技術で再構築されています。伝統的な 2 ちゃんねる風の UI ながら、現代のブラウザやデバイスで快適に利用できるように設計されています。
 
 ![vakkarma](https://raw.githubusercontent.com/calloc134/vakkarma-main/main/readme/screenshot1.png)
 
 # 使い方
 
-Vakkarma は、Cloudflare Workers 上でも動作します。デモをすでにデプロイしているので、ぜひ試してみてください。
+VakKarma は、Cloudflare Workers 上でも動作します。デモをすでにデプロイしているので、ぜひ試してみてください。
 
 https://vakkarma-main.calloc134personal.workers.dev/
 
@@ -102,7 +102,7 @@ vakkarma の URL の末尾に`/senbura/`を追加することで、専用ブラ�
 
 ## クライアント JavaScript 不要
 
-Vakkarma は、クライアントサイドの JavaScript を使用せずとも十分に利用することができます。この仕様により、Tor ブラウザなどをはじめとする JavaScript を無効にした環境でも動作します。
+VakKarma は、クライアントサイドの JavaScript を使用せずとも十分に利用することができます。この仕様により、Tor ブラウザなどをはじめとする JavaScript を無効にした環境でも動作します。
 
 ## その他仕様
 
@@ -130,7 +130,7 @@ VakKarma の コアとなる技術スタックは以下の通りです。
 
 ### HonoX による型安全な UI 構築
 
-Vakkarma では 、HonoX と呼ばれるメタフレームワークを使用しています。
+VakKarma では 、HonoX と呼ばれるメタフレームワークを使用しています。
 
 https://github.com/honojs/honox
 
