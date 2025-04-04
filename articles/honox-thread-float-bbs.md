@@ -2,8 +2,8 @@
 title: "最新技術スタックで伝統掲示板を再構築: HonoXでスレッドフロート型掲示板を作った話"
 emoji: "📋"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: ["hono", "honox", "Bun", "個人開発"]
-published: false
+topics: ["hono", "honox", "Bun", "個人開発", "cloudflareworkers"]
+published: true
 ---
 
 みなさんこんにちは。calloc134 です。今回も面白いものを作ったので是非宣伝させてください。
