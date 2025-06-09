@@ -3,7 +3,7 @@ title: "【セキュキャン課題晒し】OAuth Non-Happy Path to ATOについ
 emoji: "🛡️"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["seccamp", "セキュリティ", "OAuth", "脆弱性"]
-published: false
+published: true
 ---
 
 # はじめに

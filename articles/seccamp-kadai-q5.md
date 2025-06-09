@@ -3,7 +3,7 @@ title: "【セキュキャン課題晒し】パスキーの導入について考
 emoji: "🔑"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["セキュリティ", "パスキー", "seccamp", "OIDC", "WebAuthn"]
-published: false
+published: true
 ---
 
 # はじめに
