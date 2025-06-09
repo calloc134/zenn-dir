@@ -21,6 +21,9 @@ https://x.com/calloc134/status/1930929321876852833
 
 :::details 課題内容
 
+こちらより引用しております。
+https://www.ipa.go.jp/jinzai/security-camp/2025/camp/zenkoku/sbn8o1000000c4oy-att/kadai_b.txt
+
 > ■ Q.4（Web に関連する脆弱性・攻撃技術の検証）
 > 「Top 10 web hacking techniques of 2024」( https://portswigger.net/research/top-10-web-hacking-techniques-of-2024 ) は、Web に関するセキュリティリサーチャーの投票により作成された、2024 年に報告された興味深い Web に関する攻撃テクニック 10 選です。この Top 10 中の事例の中で、興味を持てたもの 1 つに関して、以下を説明してください。
 > (1) 事例の概要
@@ -45,6 +48,8 @@ https://zenn.dev/calloc134/articles/5e8da6c491e720#奪われた認可コード�
 # 攻撃手法の詳細
 
 「OAuth Non-Happy Path to ATO」は、2024 年の Web Hacking Techniques Top 10 に選出された攻撃手法の一つである。この攻撃手法では、OAuth で認可(もしくは認証) を行う際にエラー処理のフローの実装の欠陥を悪用することにより、認可コードを盗むことができるというものである。
+
+https://blog.voorivex.team/oauth-non-happy-path-to-ato
 
 簡単に解説すると、エラーハンドリング時にリファラに対してリダイレクトする挙動を悪用し、攻撃者に認可コードを送信させるというものになる。この際、あえてエラーを引き起こすためにパラメータの一種であるレスポンスタイプを改竄し、パラメータの欠落を悪用してエラーを引き起こしている。
 
@@ -189,6 +194,9 @@ https://zenn.dev/calloc134/articles/5e8da6c491e720#奪われた認可コード�
 # まとめ
 
 今回は、「OAuth Non-Happy Path to ATO」という攻撃手法について解説しました。OAuth のフローにおいてクライアントのエラーハンドリング実装の欠陥を悪用し、認可コードを盗むという攻撃手法でした。
+今回の記事に関する情報ならびに画像リソースは、以下のブログ記事より引用しております。
+https://blog.voorivex.team/oauth-non-happy-path-to-ato
+
 このような攻撃手法では、認可サーバ・クライアントのどちらが悪いと言い切ることができず、単体では問題のないような実装が組み合わさることで脆弱性となっていると感じました。自分が現在進行系で勉強中の OAuth に関する攻撃手法をしっかり学ぶことができ、非常に有意義な調査となりました。
 このレポートが、OAuth の攻撃手法の理解を深める一助となれば幸いです。もし理解が不十分な点、誤りがあればご指摘いただけると幸いです。
 最後に、セキュリティキャンプ合格しますように！
