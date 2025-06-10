@@ -158,7 +158,7 @@ OAuth クライアントが認可サーバからのレスポンスを受け取�
 
 この部分については、今回の事例では OAuth クライアントがフローを開始している訳ではないためクライアントが検証を行うことができない点に注意する。
 ritou さん、ご指摘ありがとうございました。
-https://zenn.dev/link/comments/7204a2372178c1
+https://zenn.dev/calloc134/articles/seccamp-kadai-q4#comment-7204a2372178c1
 
 最後に、Facebook/GitHub/Google の各プロバイダにおいて、この脆弱性が有効であったかどうかについての分析を行う。
 
