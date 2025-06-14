@@ -124,20 +124,37 @@ Fiber ノードは、React のコンポーネントの状態を表現するた�
 - key: コンポーネントの一意な識別子
 - tag: コンポーネントのタイプ
 - stateNode: コンポーネントのインスタンス (実際に対応する DOM ノードなど)
-- ref:
-- alternate: 前回の Fiber ノード (前回の状態を保持するための参照)
-
-## 更新に関するプロパティ
-
-- lanes: 更新に対応する優先度 (Lanes)
-- flags: 更新に関するフラグ (例: 属性の追加や削除など)
-- subtreeFlags: 子から渡されたフラグを集約したフラグ
+- ref: 開発者が Ref で渡したオブジェクト等
 
 ## Fiber ツリーにおける参照のプロパティ
 
 - child: 子に当たる Fiber ノード
 - sibling: 同じ親を持つ兄弟の Fiber ノード
 - return: 親に当たる Fiber ノード
+- alternate: 2 つある Fiber ノードのうち、相対するもう一方のノードへの参照 (ない場合は null)
+- index: 同じ親に属する子ノードの中でのインデックス
+
+## レンダリングに関するプロパティ
+
+- memoizedProps: 前回のレンダリングで適用されたプロパティ
+- pendingProps: 次のレンダリングで適用されるプロパティ
+- memoizedState: 前回のレンダリングで適用された状態
+- dependencies: フックの依存関係を表すオブジェクト (useContext などでコンテキストに依存している場合など)
+
+## 更新の際に指標となるプロパティ
+
+- lanes: 更新に対応する優先度 (Lanes)
+- childLanes: 子コンポーネントの優先度を集約した優先度
+- flags: 更新に関するフラグ (例: 属性の追加や削除など)
+- subtreeFlags: 子から渡されたフラグを集約したフラグ
+- deletions: 削除されるべき Fiber ノードのリスト
+
+## 副作用に関するプロパティ
+
+- firstEffect: サブツリー内で最初に副作用フラグを持つ Fiber ノード
+- nextEffect: サブツリー内で次に副作用フラグを持つ Fiber ノード
+- lastEffect: サブツリー内で最後に副作用フラグを持つ Fiber ノード
+- updateQueue: 副作用のための update オブジェクトを保持するキュー
 
 # レンダリング手法の歴史
 
