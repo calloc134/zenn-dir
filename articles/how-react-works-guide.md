@@ -300,12 +300,20 @@ deletions は、削除されるべき Fiber ノードのリストを保持する
 # レンダリングにおける Fiber ツリーの構築と交換の流れ
 
 初回レンダリングにおいて、Fiber ツリーでは下準備が行われます。
-まず、Fiber ツリーの上に存在し、Fiber ツリーを管理するための Fiber ノードである`FiberRootNode`が作成されます。このノードは Fiber ツリーを管理するノードであるため、どのような場合でも変わらず Fiber ツリーの一番根本に位置し続けます。
+まず`createRoot`関数の内部で、Fiber ツリーの上に存在し Fiber ツリーを管理するための Fiber ノードである`FiberRootNode`が作成されます。このノードは Fiber ツリーを管理するノードであるため、どのような場合でも変わらず Fiber ツリーの一番根本に位置し続けます。
+
+![](/images/how-react-works-guide/2025-06-16-17-28-09.png)
+
+:::details `FiberRootNode`の作成部分の実装
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberRoot.new.js#L134
+:::
 
 ここで、`FiberRootNode`以下に連なる Fiber ツリーの構造について説明します。
 Fiber ツリーの根本ノードは、`HostRoot`と呼ばれるタグを持つ Fiber ノードです。このコードが child プロパティで子コードを参照する形で Fiber ツリーが構築されます。
 
 先程仮想 DOM の解説を行った際に、「一つ前のレンダリングで作成した仮想 DOM」と「新しくレンダリングで作成する最中の仮想 DOM」の二つのツリーが存在すると説明しました。これらの二つの仮想 DOM が、それぞれ`current`と`workInProgress`という Fiber ツリーに相当します。
+
+![](/images/how-react-works-guide/2025-06-16-17-39-43.png)
 
 `current`ツリーは現在表示されている UI 状態を表現する Fiber ツリーであり、「一つ前のレンダリングで作成した仮想 DOM」に相当します。
 `FiberRootNode` の`current`プロパティにおいて、この`current`ツリーを参照しています。
@@ -313,7 +321,13 @@ Fiber ツリーの根本ノードは、`HostRoot`と呼ばれるタグを持つ 
 
 レンダーフェーズで`workInProgress`を構築し終わった後、コミットフェーズで`workInProgress`の内容を実 DOM に適用し終わると、`current`プロパティの参照先を`workInProgress`Fiber ツリーの根本に当たる Fiber ノードに切り替えます。
 したがってその特性上、current プロパティの Fiber ツリーの内容は常に実 DOM の UI と一致しています。
+
+![](/images/how-react-works-guide/2025-06-16-17-47-26.png)
+
 余談ですが初回レンダリング時には実 DOM は存在しないため、current プロパティ 以下のツリーは存在するものの、子ノードは存在しない状態となります。
+
+また、切り替えが終わったあとも昔の`current`ツリーはメモリ上に残り続けます。これは React がオブジェクトを再生成するためのコストを避けるための工夫となっています。
+次のレンダリングでできるだけオブジェクトをリサイクルすることで新しい Fiber ノードを作成するコストを削減し、パフォーマンスを向上させることができます。
 
 # React における優先度の概念、レーン
 
