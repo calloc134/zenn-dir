@@ -175,14 +175,14 @@ tag は Fiber ノードの種類を表現するプロパティとなっており
 | HostComponent     | DOM 要素 (例: div, span など)           |
 | HostText          | テキストノード (例: "Hello, World!")    |
 | Fragment          | `<></>` で表現されるようなフラグメント  |
-| Context           | コンテキストプロバイダー                |
+| ContextProvider   | コンテキストプロバイダー                |
 | SuspenseComponent | Suspense コンポーネント                 |
 | MemoComponent     | React.memo でラップされたコンポーネント |
 
 ### stateNode
 
 stateNode はレンダリングの結果であるインスタンスを格納するためのプロパティです。
-関数コンポーネントの場合はレンダリングの実態がないため常に null になります。一方 HostComponent (DOM 要素) や HostText (テキストノード)の場合、レンダリングの結果生成された DOM ノードが格納されることになります。
+関数コンポーネントの場合はレンダリングの実態がないため null になります。一方 HostComponent (DOM 要素) や HostText (テキストノード)の場合、レンダリングの結果生成された DOM ノードが格納されることになります。
 
 ## Fiber ツリーにおける参照のプロパティ
 
@@ -266,9 +266,9 @@ Fiber ツリーの根本ノードは、`HostRoot`と呼ばれるタグを持つ 
 `FiberRootNode` の`current`プロパティにおいて、この`current`ツリーを参照しています。
 `workInProgress`ツリーは、現在のレンダリングで作成されている Fiber ツリーであり、「新しくレンダリングで作成する最中の仮想 DOM」に相当します。`FiberRootNode` に該当するプロパティは存在しませんが、レンダリングの処理中に変数として存在します。
 
-レンダーフェーズで`workInProgress`を構築し終わった後、コミットフェーズで`workInProgress`の内容を実 DOM に適用し終わると、`current`プロパティの参照先を`workInProgress`Fiber ツリーの根本に当たる Fiber ノードに更新します。
+レンダーフェーズで`workInProgress`を構築し終わった後、コミットフェーズで`workInProgress`の内容を実 DOM に適用し終わると、`current`プロパティの参照先を`workInProgress`Fiber ツリーの根本に当たる Fiber ノードに切り替えます。
 したがってその特性上、current プロパティの Fiber ツリーの内容は常に実 DOM の UI と一致しています。
-余談ですが、初回レンダリング時には実 DOM は存在しないため、current プロパティは null となります。
+余談ですが初回レンダリング時には実 DOM は存在しないため、current プロパティ 以下のツリーは存在するものの、子ノードは存在しない状態となります。
 
 # React における優先度の概念、レーン
 
