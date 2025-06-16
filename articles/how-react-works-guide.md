@@ -263,7 +263,7 @@ Fiber ツリーの根本ノードは、`HostRoot`と呼ばれるタグを持つ 
 先程仮想 DOM の解説を行った際に、「一つ前のレンダリングで作成した仮想 DOM」と「新しくレンダリングで作成する最中の仮想 DOM」の二つのツリーが存在すると説明しました。これらの二つの仮想 DOM が、それぞれ`current`と`workInProgress`という Fiber ツリーに相当します。
 
 `current`ツリーは現在表示されている UI 状態を表現する Fiber ツリーであり、「一つ前のレンダリングで作成した仮想 DOM」に相当します。
-`FiberRootNode` の`current`プロパティにおいて、この`current`ツリーを`参照しています。
+`FiberRootNode` の`current`プロパティにおいて、この`current`ツリーを参照しています。
 `workInProgress`ツリーは、現在のレンダリングで作成されている Fiber ツリーであり、「新しくレンダリングで作成する最中の仮想 DOM」に相当します。`FiberRootNode` に該当するプロパティは存在しませんが、レンダリングの処理中に変数として存在します。
 
 レンダーフェーズで`workInProgress`を構築し終わった後、コミットフェーズで`workInProgress`の内容を実 DOM に適用し終わると、`current`プロパティの参照先を`workInProgress`Fiber ツリーの根本に当たる Fiber ノードに更新します。
