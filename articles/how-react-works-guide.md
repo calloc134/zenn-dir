@@ -363,11 +363,13 @@ React のタスクキューには二種類が存在し、それぞれ異なる�
 二つのキューに違いはありますが、基本的な構造は同じと考え、抽象化して説明します。
 
 `scheduleCallback`というメソッド内部で実際にタスクをキューに登録する処理が行われます。この内部でタスクオブジェクトが生成され、タスクが優先度付きキューに登録されます。
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L345
 
 React はタスクをキューに登録する際に、優先度(レーン)からスケジューリング優先度を導出します。
 更に、スケジューリング優先度に応じてタイムアウト値というものを設定します。これはミリ秒で表現され、最大遅延時間とも表現されます。要するにタスクをどれだけ後回しにしていいかという値です。
 このタイムアウト値の計算を行い、id やコールバック関数の用意を済ませてタスクオブジェクトを生成した後、タスクを優先度付きキューに登録します。
 この際、ソートに利用するキーとして、`taskQueue`の場合はタスクの開始予定時刻(`startTime`)を、`timerQueue`の場合はタスクの期限切れ時刻(`expirationTime`、つまり開始予定時刻 + タイムアウト値)を利用します。
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L343
 
 ここからは次のスケジューリングフェーズへと移行します。
 
