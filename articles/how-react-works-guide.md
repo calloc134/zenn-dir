@@ -363,13 +363,19 @@ React のタスクキューには二種類が存在し、それぞれ異なる�
 二つのキューに違いはありますが、基本的な構造は同じと考え、抽象化して説明します。
 
 `scheduleCallback`というメソッド内部で実際にタスクをキューに登録する処理が行われます。この内部でタスクオブジェクトが生成され、タスクが優先度付きキューに登録されます。
+
+:::details タスク作成の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L345
+:::
 
 React はタスクをキューに登録する際に、優先度(レーン)からスケジューリング優先度を導出します。
 更に、スケジューリング優先度に応じてタイムアウト値というものを設定します。これはミリ秒で表現され、最大遅延時間とも表現されます。要するにタスクをどれだけ後回しにしていいかという値です。
 このタイムアウト値の計算を行い、id やコールバック関数の用意を済ませてタスクオブジェクトを生成した後、タスクを優先度付きキューに登録します。
 この際、ソートに利用するキーとして、`taskQueue`の場合はタスクの開始予定時刻(`startTime`)を、`timerQueue`の場合はタスクの期限切れ時刻(`expirationTime`、つまり開始予定時刻 + タイムアウト値)を利用します。
+
+:::details タスク登録の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L343
+:::
 
 ここからは次のスケジューリングフェーズへと移行します。
 
@@ -408,17 +414,23 @@ while (workInProgress !== null || shouldYield()) {
 初回レンダリングと再レンダリングで状況は変わりますが、workInProgress というのは単に「現在処理すべき Fiber ノード」を指す変数です。すべて処理が終わると`null`となるため、ループは終了します。
 加えて後者の場合、レンダー処理を中断すべきかどうかを判断するフラグも同時に確認します。このようにすることでスケジューラの指示のとおりにレンダーフェーズを中断することができます。
 
+:::details performUnitOfWork の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
 
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829
+:::
 
 performUnitOfWork 関数内部では、beginWork 関数と completeUnitOfWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
 
+:::details performUnitOfWork の処理の流れ
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
+:::
 
 ではまず、beginWork 関数について見ていきましょう。
 
+:::details beginWork 関数の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3685
+:::
 
 ## beginWork 関数: 更新の検出と bailout の試行
 
@@ -449,13 +461,17 @@ bailout が終わった後はハイドレーション等の準備を行います
 
 その後、`reconcileChildren`関数を用いてリコンシリエーションを行います。後ほど解説を行います。
 
+:::details updateFunctionComponent 関数の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951
+:::
 
 DOM 要素の場合、`updateHostComponent`関数が呼び出されます。
 簡単に解説すると、まずハイドレーションの準備を行い、適切な最適化処理を行います。加えて Fiber ノードが ref プロパティを持っている場合、今後実行されるコミットフェーズにおいて`ref.current`が更新されるよう、マークをしておきます。
 その後、関数コンポーネントと同じく`reconcileChildren`関数を用いて子コンポーネントのリコンシリエーションを行います。
 
+:::details updateHostComponent 関数の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
+:::
 
 ## beginWork 関数: リコンシリエーション処理
 
