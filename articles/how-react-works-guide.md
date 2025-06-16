@@ -408,9 +408,9 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 レンダーの具体的な処理は、`performUnitOfWork`関数の中で行われます。レンダー処理は中断されることがありますが、ここでは解説を簡単にするため中断部分を省略しながら解説を行います。
 
-## performUnitOfWork の概要
+## レンダーフェーズにおけるループ
 
-performUnitOfWork 関数自体はループで囲まれる形となっています。
+performUnitOfWork 関数で、ループを利用しながらそれぞれの Fiber ノードを処理していきます。
 
 ```ts
 while (workInProgress !== null) {
