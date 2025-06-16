@@ -388,6 +388,80 @@ React はタスクをキューに登録する際に、優先度(レーン)から
 
 # レンダーフェーズ
 
+ここから、React のレンダリングのメイン部分であるレンダーフェーズについて解説していきます。ここで、コンポーネントのレンダリングを実際に行いながら差分検知を行います。なお、React では差分検知のことを「Reconciliation (リコンシリエーション)」と呼んでいます。
+
+レンダーの具体的な処理は、`performUnitOfWork`関数の中で行われます。レンダー処理は中断されることがありますが、ここでは解説を簡単にするため中断部分を省略しながら解説を行います。
+
+## performUnitOfWork の概要
+
+performUnitOfWork 関数自体はループで囲まれる形となっています。
+
+```ts
+while (workInProgress !== null) {
+  performUnitOfWork(workInProgress);
+}
+```
+
+```ts
+while (workInProgress !== null || shouldYield()) {
+  performUnitOfWork(workInProgress);
+}
+```
+
+初回レンダリングと再レンダリングで状況は変わりますが、workInProgress というのは単に「現在処理すべき Fiber ノード」を指す変数です。すべて処理が終わると`null`となるため、ループは終了します。
+加えて後者の場合、レンダー処理を中断すべきかどうかを判断するフラグも同時に確認します。このようにすることでスケジューラの指示のとおりにレンダーフェーズを中断することができます。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829
+
+performUnitOfWork 関数内部では、beginWork 関数と completeUnitOfWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
+
+ではまず、beginWork 関数について見ていきましょう。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3685
+
+## beginWork 関数: 更新の検出と bailout の試行
+
+まず最初に、更新を検出するための処理が行われます。
+
+前回のレンダリングで渡された Props と今回のレンダリングで渡された Props について、同じオブジェクトを参照しているかを確認します。一致していなければ更新されたと判断され、更新が必要であることを記録します。処理を簡単にするため浅い比較を行っています。
+次に`checkScheduledUpdateOrContext`関数を利用し、コンテキストの変更があるか、状態更新があるかを確認します。
+
+その他更新が必要かどうかを判断するための処理が行われます。最終的に更新が必要でないと判断された場合、更新をスキップするような機構が働きます。
+
+bailout の条件を満たす場合、必要最低限のノードのコピーを行った上で Fiber ノードの計算を丸ごとスキップします。その他子ノードの Fiber ツリーの処理もスキップされますが、複雑であるためここでは詳しく解説しません。
+
+bailout が終わった後はハイドレーション等の準備を行いますが、ここも省略します。
+
+## beginWork 関数: コンポーネントに応じた更新処理
+
+次に、大きな Switch 文で Fiber ノードの tag の値に応じた処理を行います。ここでは関数コンポーネント (FunctionComponent) と DOM 要素 (HostComponent) に絞って処理を解説します。
+
+関数コンポーネントの場合、`updateFunctionComponent`関数が呼び出されます。おおまかな流れを解説します。
+最初に`renderWithHooks`関数を用いて、フックを処理しながらコンポーネントのレンダリングを行います。フックの処理については後ほど専用のセクションで詳しく解説します。
+
+更に、関数コンポーネント特有の bailout 処理を行います。条件は以下のとおりです。
+
+- 初回レンダリングでなく、前回の Fiber ツリーが存在している
+- フックやコンポーネントの Props が変更されていない
+
+この条件が満たされると関数コンポーネントに変更がないと判断され、フックの再評価を含めた以後の再計算をスキップします。
+
+その後、`reconcileChildren`関数を用いてリコンシリエーションを行います。後ほど解説を行います。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951
+
+DOM 要素の場合、`updateHostComponent`関数が呼び出されます。
+簡単に解説すると、まずハイドレーションの準備を行い、適切な最適化処理を行います。加えて Fiber ノードが ref プロパティを持っている場合、今後実行されるコミットフェーズにおいて`ref.current`が更新されるよう、マークをしておきます。
+その後、関数コンポーネントと同じく`reconcileChildren`関数を用いて子コンポーネントのリコンシリエーションを行います。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
+
+## beginWork 関数: リコンシリエーション処理
+
 ## 深さ優先探索
 
 ## 関数コンポーネントの実行
