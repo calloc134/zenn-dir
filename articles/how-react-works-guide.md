@@ -569,12 +569,15 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 `reconcileChildren`関数は、子コンポーネントのリコンシリエーションを行うための関数です。
 リコンシリエーションとは、前回のレンダリングと今回のレンダリングでの差分を検出し、フラグをつけていくような処理を指します。
 仕組みは複雑ですが、ざっくりと解説していきたいと思います。
+なお、`reconcileChildren`の取る引数を先程解説しましたが、差分検出にあたって比較される対象は`current.child`と`nextChildren`となります。つまり、既存の Fiber ノードと新しい子コンポーネントの JSX 要素を比較し、差分を検出していくことになります。新しい Fiber ノードは差分検出の後に作成されるため、`workInProgress.child`との比較ではないことに注意してください。
 
 ### 共通処理部分
 
 まず共通処理として、`reconcileChildFibersImpl`関数が呼び出されます。
 
-(TODO)
+ここで、
+
+(TODO: ここでの処理の流れを解説)
 
 ### 初回レンダリングの場合
 
