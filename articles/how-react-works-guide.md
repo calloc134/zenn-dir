@@ -154,6 +154,10 @@ React が内部で管理しているのは、仮想 DOM ではなく「Fiber ノ
 
 Fiber ノードは、React のコンポーネントの状態を表現するためのオブジェクトであり、以下のような情報を持っています。
 
+:::details Fiber ノードの定義
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactInternalTypes.js#L67
+:::
+
 ## 基本的なプロパティ
 
 - key: コンポーネントの一意な識別子
@@ -281,6 +285,10 @@ React では、優先度を「Lanes (レーン)」と呼ばれる概念で管理
 
 二進数で表現することのメリットとして、二進数で OR 演算を行うことで複数の優先度を同時に表現できることが挙げられます。フラグをそれぞれ変数で持たせるより二進数で管理する方がメモリ効率が良くなるという決定があったのでしょう。
 この優先度の概念は、React のレンダリングのスケジューリングにおいて重要な役割を果たします。是非覚えておいてください。
+
+:::details レーンの定義
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberLane.new.js#L36
+:::
 
 # React のレンダリング手法の歴史
 
