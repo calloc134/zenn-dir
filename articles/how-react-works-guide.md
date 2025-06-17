@@ -505,14 +505,11 @@ performUnitOfWork 関数内部では、beginWork 関数と completeWork 関数�
 beginWork 関数はレンダリングと差分検知、completeWork は後処理を行う立ち位置となります。
 
 :::details performUnitOfWork の処理の流れ
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1836-L1862
+具体的な処理の流れは後ほど確認します。
 :::
 
 ではまず、beginWork 関数について見ていきましょう。
-
-:::details beginWork 関数の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3685
-:::
 
 ## beginWork 関数: 更新の検出と bailout の試行
 
@@ -554,6 +551,7 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 なお、初回レンダリングの場合はこの変数は false になりますが、current が存在しないためこの変数はあまり意味を持ちません。
 
 ```ts
+  if (...){
   } else {
     didReceiveUpdate = false;
 
@@ -629,12 +627,12 @@ https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
 更に最適化のため、関数コンポーネント特有の bailout 処理を行います。
 先程の bailout はコンポーネントのタイプに関連なく条件が厳密でしたが、こちらの bailout は少し緩い条件で行われます。条件は以下のとおりです。
 
-- 初回レンダリングでなく、前回の Fiber ツリーが存在している
-- フックやコンポーネントの Props が変更されていない
+- 二回目以降のレンダリングであり、`current`が存在する場合
+- 先程、更新が不要と判断された場合
 
 この条件が満たされると関数コンポーネントに変更がないと判断され、フックの再評価を含めた以後の再計算をスキップします。
 
-その後、差分検出処理(リコンシリエーション)に移行します。`reconcileChildren`関数を用いてリコンシリエーションを行います。
+その後フラグをマージし、差分検出処理(リコンシリエーション)に移行します。`reconcileChildren`関数を用いてリコンシリエーションを行います。
 関数に与える引数はおよそ次のとおりです。
 
 - `current`: 現在の Fiber ツリーのノード
@@ -645,7 +643,47 @@ https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
 リコンシリエーション処理の詳細は後ほど解説します。
 
 :::details updateFunctionComponent 関数の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951-L1046
+
+処理が長いので、ここでは単純にして紹介しました。
+実際はコンテキストの取得などが存在しているようです。
+
+レンダリングはざっくりこのように行われています。前述の通り、`nextChildren`は関数コンポーネントの実行結果である JSX 要素となります。この後に useId フックが呼び出されているのはおそらくハイドレーション関連だと思われます。
+
+```ts
+nextChildren = renderWithHooks(
+  current,
+  workInProgress,
+  Component,
+  nextProps,
+  context,
+  renderLanes
+);
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1019-L1026
+
+bailout 処理は以下を参考にしています。ここで先程の`didReceiveUpdate`変数が利用されているのがわかります。
+
+```ts
+if (current !== null && !didReceiveUpdate) {
+  bailoutHooks(current, workInProgress, renderLanes);
+  return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1033-L1036
+
+フラグのマージを行い、リコンシリエーションを行い、その結果となった Fiber ノードを返します。
+
+```ts
+workInProgress.flags |= PerformedWork;
+reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+return workInProgress.child;
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1043-L1045
+
 :::
 
 次に、DOM 要素の場合の処理を見ていきます。
