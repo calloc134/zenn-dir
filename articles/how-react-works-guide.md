@@ -495,6 +495,8 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 performUnitOfWork 関数内部では、beginWork 関数と completeUnitOfWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
 
+beginWork 関数はレンダリングと差分検知、completeUnitOfWork は後処理を行う立ち位置となります。
+
 :::details performUnitOfWork の処理の流れ
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
 :::
@@ -518,7 +520,7 @@ bailout の条件を満たす場合、必要最低限のノードのコピーを
 
 bailout が終わった後はハイドレーション等の準備を行いますが、ここも省略します。
 
-## beginWork 関数: コンポーネントに応じた更新処理
+## beginWork 関数: コンポーネントに応じたレンダリング処理
 
 次に、大きな Switch 文で Fiber ノードの tag の値に応じた処理を行います。ここでは関数コンポーネント (FunctionComponent) と DOM 要素 (HostComponent) に絞って処理を解説します。
 
@@ -580,7 +582,7 @@ HostComponent の場合も関数コンポーネントと同様に`nextChildren`�
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
 :::
 
-## beginWork 関数: リコンシリエーション処理
+## beginWork 関数: 差分検知 (リコンシリエーション) 処理
 
 `reconcileChildren`関数は、子コンポーネントのリコンシリエーションを行うための関数です。
 リコンシリエーションとは、前回のレンダリングと今回のレンダリングでの差分を検出し、フラグをつけていくような処理を指します。
@@ -647,13 +649,6 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 配列となった要素に対して、位置ベースのマッチングと key ベースのマッチングの二つの方法で差分検出を行います。
 
-<!-- 1. 位置ベースのマッチング
-1. 既存 Fiber ノードと新しい子要素の配列を比較し、位置が一致すれば Fiber を再利用
-2. 位置マッチング
-   配列の処理が一通り終了した場合、残りの既存の Fiber ノードに対して削除フラグを付与
-3. 新しい要素が残っている場合、新しい Fiber ノードとして新規作成し Placement フラグを付与
-4. 既存の Fiber を key を持つ連想配列として管理し、マッチングを行う -->
-
 ##### 位置ベースのマッチング
 
 位置ベースのマッチングでは、既存の Fiber ノードと新しい子要素の配列を比較し、同じ位置同士でキーと型が一致していることを判定していきます。
@@ -683,13 +678,9 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1245
 :::
 
+## completeUnitOfWork 関数: 後処理
+
 ## 深さ優先探索
-
-## 関数コンポーネントの実行
-
-##
-
-## フラグの設定
 
 # コミットフェーズ
 
