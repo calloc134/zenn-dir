@@ -720,22 +720,6 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 次に、子要素をテキストとして扱うべきかを判定し、処理を行います。これは最適化の一貫であるため省略します。
 
-```ts
-const isDirectTextChild = shouldSetTextContent(type, nextProps);
-
-if (isDirectTextChild) {
-  // We special case a direct text child of a host node. This is a common
-  // case. We won't handle it as a reified child. We will instead handle
-  // this in the host environment that also has access to this prop. That
-  // avoids allocating another HostText fiber and traversing it.
-  nextChildren = null;
-} else if (prevProps !== null && shouldSetTextContent(type, prevProps)) {
-  // If we're switching from a direct text child to a normal child, or to
-  // empty, we need to schedule the text content to be reset.
-  workInProgress.flags |= ContentReset;
-}
-```
-
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1442-L1454
 
 最後に markRef 関数を用いて ref 更新に追従できるようフラグを設定してから、関数コンポーネントと同様にリコンシリエーションを行います。
