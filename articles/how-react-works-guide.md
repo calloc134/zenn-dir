@@ -638,15 +638,119 @@ else {
 
 # スケジュールフェーズ
 
-このフェーズでは、React がレンダリングの計画を立て、それを実行するための準備・用意を行います。主に`workLoop`と呼ばれるループで構成されており、React がタスクを処理するためのメインのループとなります。スケジューリングを行うにあたり、一つのタスクの持ち時間であるタイムスライス時間が設定されており、急ぎであれば 5 ミリ秒、急ぎでなければ 25 ミリ秒といった形で設定されます。
+このフェーズでは、React がレンダリングの計画を立て、それを実行するための準備・用意を行います。主に`workLoop`と呼ばれるループで構成されており、React がタスクを処理するためのメインのループとなります。実行中のタスクがある限り繰り返しますが、後述する処理で中断されることがあります。
+
+スケジューリングを行うにあたり、一つのタスクの持ち時間であるタイムスライス時間が設定されます。ブラウザ環境にも依存しますがおおよそ 5 ミリ秒程度となっています。
+
+まず下準備として、`timerQueue`にある後回し用のタスクのうち開始時刻が到来したものを`taskQueue`に移動します。これにより遅延タスクが実行可能な状態になります。
 
 ループ内部では`peek`メソッドを用いて一番上のタスクを閲覧し、処理を行うかを判断します。
-タスクにまだ期限の余裕があり、かつ現在の持ち時間である 5 ミリ秒のタイムスライスを使い切った場合、タスクを後回しにすることにしてタスクを取り出さずにループを継続します。
-そうでない場合、`pop`メソッドでタスクを取り出してタスクの処理を行います。具体的には、タスクのプロパティに付属するコールバック関数を実行することになります。
-この処理の結果またタスクが発生するようであれば、再度タスクをキューに登録し、ループを繰り返します。
+タスクにまだ期限の余裕があり、かつタイムスライス時間を鑑みてホストに制御を戻すべきと判断される場合、タスクの処理を止めてホストのブラウザに制御を戻すような動作を行います。
+
+ホストに制御を戻さない場合はタスクの処理を行います。具体的には、タスクのプロパティに付属するコールバック関数を実行することになります。
+コールバック関数を実行した後に null や undefined が返ってきた場合、タスクが完了したとしてキューを`pop`し、該当のタスクを削除します。
+関数の戻り値として関数が返ってきた場合、タスクが継続しており実行すべき関数がまだ存在していると判断されます。言い換えると、タスクのやるべきことが残っているということになります。この場合はタスクのコールバック関数を先程の関数に差し替え、タスクをそのままキューに残します。
+
+このようにして、React はタスクを効率的に処理し、必要に応じて中断や再開を行いながらレンダリングを進めていきます。このコールバック関数の内側で、React のレンダリングのメイン部分であるレンダーフェーズが開始されます。
 
 :::details スケジュールフェーズの実装
+
+以下のコードで解説されている部分がスケジュールフェーズの実装です。
 https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L189C1-L244C2
+
+現在時刻を取得し、`timerQueue`から開始時刻が到来したタスクを`taskQueue`に移動します。
+その後一番最初のタスクを取得します。なお pop している訳ではないため、タスクはキューから削除されません。
+
+```ts
+let currentTime = initialTime;
+advanceTimers(currentTime);
+currentTask = peek(taskQueue);
+```
+
+メインループでタスクをチェックします。期限が切れておらず余裕があり、かつホストに返すべきタイミングと判断された場合はループを脱出してホストに制御を戻すようにしています。
+
+```ts
+while (
+  currentTask !== null &&
+  !(enableSchedulerDebugging && isSchedulerPaused)
+) {
+  // 期限未到来かつ時間切れの場合はループ脱出
+  if (
+    currentTask.expirationTime > currentTime &&
+    (!hasTimeRemaining || shouldYieldToHost())
+  ) {
+    break;
+  }
+  // 以下、callback 実行部…
+}
+```
+
+タスクの具体的な実行は以下のとおりです。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L204C1-L232C35
+
+まず現在のタスクのコールバック関数を取得し、関数であれば一度削除してからコールバック関数を実行します。
+
+コールバック関数の実行結果もコールバック関数の場合、タスクが継続していると判断し、タスクのコールバック関数のみを差し替えてキューに残します。実行結果が関数でなければタスクを完了としてキューから削除します。
+ここで再度`advanceTimers`を呼び出して、`timerQueue`から開始時刻が到来したタスクを移動します。
+最後にまた先頭のタスクを`peek`で取得し、同じループが続いていきます。
+
+```ts
+const callback = currentTask.callback;
+if (typeof callback === "function") {
+  currentTask.callback = null;
+  currentPriorityLevel = currentTask.priorityLevel;
+  const didUserCallbackTimeout = currentTask.expirationTime <= currentTime;
+
+  ...(プロファイリング関連を省略)...
+
+  const continuationCallback = callback(didUserCallbackTimeout);
+  currentTime = getCurrentTime();
+
+  // 継続コールバックが返ってきたかで分岐
+  if (typeof continuationCallback === "function") {
+    // 継続あり：タスクをキューに残し、新しいコールバックに差し替え
+    currentTask.callback = continuationCallback;
+    ...(プロファイリング関連を省略)...
+  } else {
+    // 継続なし：タスク完了扱いにしてキューから除去
+    ...(プロファイリング関連を省略)...
+    // 安全のため、いま先頭に残っていれば pop で除去
+    if (currentTask === peek(taskQueue)) {
+      pop(taskQueue);
+    }
+  }
+
+  // 前述の通りここでもtimerQueue から開始時刻が到来したタスクを移動
+  advanceTimers(currentTime);
+} else {
+  // callback が関数でない場合はそのままキューから除去
+  pop(taskQueue);
+}
+
+// 次のタスクを先頭から参照してループ継続判定へ戻す
+currentTask = peek(taskQueue);
+```
+
+ループから抜けた後についての処理は以下のとおりです。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L234C1-L243C4
+
+追加でタスクがあれば true を返却します。また、`taskQueue`が空の場合でも`timerQueue`に開始時刻が到来したタスクがあればホストタイマーを設定しておきます。どちらにもタスクがない場合は false を返却し、当面は workLoop を行わないということを伝えます。
+
+```ts
+// Return whether there's additional work
+if (currentTask !== null) {
+  return true;
+} else {
+  const firstTimer = peek(timerQueue);
+  if (firstTimer !== null) {
+    requestHostTimeout(handleTimeout, firstTimer.startTime - currentTime);
+  }
+  return false;
+}
+```
+
 :::
 
 このコールバック関数が実行されることで、React のレンダーフェーズが開始されます。
