@@ -632,6 +632,17 @@ return [<div> Hello </div>, <span> World </span>];
 
 #### オブジェクト型・単一要素の場合
 
+通常の単一要素の場合、`reconcileSingleElement 関数を使って差分検出を行います。
+
+ここでまず key の一致を判定し、一致しない場合は既存の子ノードは不要として認識され、子ノードに対して削除フラグを適用します。
+key が一致している場合、型の判定に進みます。型が一致している場合は既存の Fiber を再利用し、型が一致しない場合は Placement フラグを立てた上で新しい Fiber ノードを作成する処理を行います。
+
+既存の Fiber ノードが存在しない場合または key が一致しない場合は、新しい Fiber ノードを作成し Placement フラグを付与します。
+
+:::details 新規 Fiber ノードの作成部分の実装
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L359
+:::
+
 #### オブジェクト型・配列の場合
 
 // TODO: v18.2 から最新版にかけてコードが変更されているが、v18.2 に準拠するように解説を行う
