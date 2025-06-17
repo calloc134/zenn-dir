@@ -769,6 +769,17 @@ current が null、つまり初回レンダリングの場合は、`mountChildFi
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L288-L319
 
 なお関数の呼び出しの通り、差分検出のための比較対象は`current.child`と`nextChildren`となります。この二つで差分検出を行い、必要な Fiber ノードが`workInProgress`ツリーに追加されていくという流れになります。
+
+なお、この二つの関数の違いは`ChildReconciler`関数に渡す引数の値のみです。
+
+```ts
+export const reconcileChildFibers = ChildReconciler(true);
+export const mountChildFibers = ChildReconciler(false);
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1349-L1350
+
+この`ChildReconciler`関数は React 屈指の巨大関数であり、差分検出のアルゴリズムを実装しています。後ほど解説します。
 :::
 
 ### 共通処理部分
