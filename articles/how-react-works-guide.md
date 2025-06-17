@@ -466,7 +466,7 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 ここから、React のレンダリングのメイン部分であるレンダーフェーズについて解説していきます。ここで、コンポーネントのレンダリングを実際に行いながら差分検知を行います。なお、React では差分検知のことを「Reconciliation (リコンシリエーション)」と呼んでいます。
 
-レンダーの具体的な処理は、`performUnitOfWork`関数の中で行われます。レンダー処理は中断されることがありますが、ここでは解説を簡単にするため中断部分を省略しながら解説を行います。
+レンダーの具体的な処理は、`performUnitOfWork`関数の中で行われます。
 
 ## レンダーフェーズにおけるループ
 
@@ -493,9 +493,9 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829
 :::
 
-performUnitOfWork 関数内部では、beginWork 関数と completeUnitOfWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
+performUnitOfWork 関数内部では、beginWork 関数と completeWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
 
-beginWork 関数はレンダリングと差分検知、completeUnitOfWork は後処理を行う立ち位置となります。
+beginWork 関数はレンダリングと差分検知、completeWork は後処理を行う立ち位置となります。
 
 :::details performUnitOfWork の処理の流れ
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
@@ -511,23 +511,23 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 まず最初に、更新を検出するための処理が行われます。
 
-前回のレンダリングで渡された Props と今回のレンダリングで渡された Props について、同じオブジェクトを参照しているかを確認します。一致していなければ更新されたと判断され、更新が必要であることを記録します。処理を簡単にするため浅い比較を行っています。
-次に`checkScheduledUpdateOrContext`関数を利用し、コンテキストの変更があるか、状態更新があるかを確認します。
+前回のレンダリングで渡された Props と今回のレンダリングで渡された Props について、同じオブジェクトを参照しているかを確認します。一致していなければ更新されたと判断され、更新が必要であることを記録します。処理を簡単にするため浅い比較を行っています。また、コンテキストの変更があるか、状態更新があるか、その他更新が必要かどうかを判断するための処理が行われます。
 
-その他更新が必要かどうかを判断するための処理が行われます。最終的に更新が必要でないと判断された場合、更新をスキップするような機構が働きます。
-
-bailout の条件を満たす場合、必要最低限のノードのコピーを行った上で Fiber ノードの計算を丸ごとスキップします。その他子ノードの Fiber ツリーの処理もスキップされますが、複雑であるためここでは詳しく解説しません。
-
-bailout が終わった後はハイドレーション等の準備を行いますが、ここも省略します。
+最終的に更新が必要でないと判断された場合、更新をスキップするような機構が働きます。この機構のことを「bailout (ベイルアウト)」と呼びます。
+bailout の条件を満たす場合、必要最低限のノードのコピーを行った上で Fiber ノードの計算を丸ごとスキップします。具体的な処理は複雑であるためここでは詳しく解説しませんが、処理を最適化する機構があるということだけ覚えておいてください。
 
 ## beginWork 関数: コンポーネントに応じたレンダリング処理
 
 次に、大きな Switch 文で Fiber ノードの tag の値に応じた処理を行います。ここでは関数コンポーネント (FunctionComponent) と DOM 要素 (HostComponent) に絞って処理を解説します。
 
-関数コンポーネントの場合、`updateFunctionComponent`関数が呼び出されます。おおまかな流れを解説します。
-最初に`renderWithHooks`関数を用いて、フックを処理しながらコンポーネントのレンダリングを行います。ここで初めて、関数コンポーネントが実行されるというわけです。
+関数コンポーネントの場合のおおまかな流れを解説します。
+最初に、コンポーネントを実行するための関数`renderWithHooks`を用いて、フックを処理しつつコンポーネントのレンダリングを行います。ここで初めて、関数コンポーネントが実行されるというわけです。
 
-関数コンポーネントは、関数を実行して JSX 要素を返すというものです。型で述べると`ReactNode`のいずれかを返す関数となります。つまり`renderWithHooks`関数の戻り値も`ReactNode`のいずれかとなることに留意してください。この戻り値が`nextChildren`として、後のリコンシリエーションに利用されます。
+関数コンポーネントの定義は関数を実行して JSX 要素を返すというものです。つまり`ReactNode`型に含まれるいずれの要素を返す関数となります。したがって、`renderWithHooks`関数の戻り値も`ReactNode`型のいずれかの要素となります。この戻り値が`nextChildren`として、後のリコンシリエーションに利用されます。
+
+:::message
+`renderWithHooks`内部でどのようにフックを処理しているかの詳細は、後ほど専用のセクションで詳しく解説します。
+:::
 
 `ReactNode`型がどのような型であるかをざっくりおさらいしておきましょう。以下のいずれかのような型を持ちます。
 
@@ -535,23 +535,21 @@ bailout が終わった後はハイドレーション等の準備を行います
 - ReactText: テキストノード (文字列や数値)
 - ReactFragment: 複数の要素をまとめるためのフラグメント
 
-その他、ReactPortal やコンテキストに関連する型もありますが、ここでは主に上記の型を扱います。
+その他 ReactPortal やコンテキストに関連する型もありますが、省略します。
 
 :::details ReactNode 型の定義
 https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
 :::
 
-なお、フックの処理については後ほど専用のセクションで詳しく解説します。
-
-更に、関数コンポーネント特有の bailout 処理を行います。条件は以下のとおりです。
+更に最適化のため、関数コンポーネント特有の bailout 処理を行います。条件は以下のとおりです。
 
 - 初回レンダリングでなく、前回の Fiber ツリーが存在している
 - フックやコンポーネントの Props が変更されていない
 
 この条件が満たされると関数コンポーネントに変更がないと判断され、フックの再評価を含めた以後の再計算をスキップします。
 
-その後、`reconcileChildren`関数を用いてリコンシリエーションを行います。
-`reconcileChildren`関数に与える引数はおよそ次のとおりです。
+その後、差分検出処理(リコンシリエーション)に移行します。`reconcileChildren`関数を用いてリコンシリエーションを行います。
+関数に与える引数はおよそ次のとおりです。
 
 - `current`: 現在の Fiber ツリーのノード
 - `workInProgress`: 現在のレンダリングで作成される 予定の Fiber ツリーのノード
@@ -564,8 +562,8 @@ https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951
 :::
 
-DOM 要素の場合、`updateHostComponent`関数が呼び出されます。
-簡単に解説すると、まずハイドレーションの準備を行い、適切な最適化処理を行います。加えて Fiber ノードが ref プロパティを持っている場合、今後実行されるコミットフェーズにおいて`ref.current`が更新されるよう、マークをしておきます。
+次に、DOM 要素の場合の処理を見ていきます。
+まず適切な最適化処理を行った後、Fiber ノードが ref プロパティを持っている場合は今後実行されるコミットフェーズにおいて`ref.current`が更新されるよう、マークをしておきます。
 その後、関数コンポーネントと同じく`reconcileChildren`関数を用いて子コンポーネントのリコンシリエーションを行います。
 
 引数は関数コンポーネントと同じく以下のとおりです。
@@ -576,7 +574,10 @@ DOM 要素の場合、`updateHostComponent`関数が呼び出されます。
 - `renderLanes`: レーン (優先度) の値
 
 HostComponent の場合も関数コンポーネントと同様に`nextChildren`が ReactNode 型のオブジェクトとなります。
-余談ですが、`<div> Hello World </div>`のようにテキストコンテンツのみ存在する場合は 最適化のため null となります。
+
+::::::message
+余談ですが、`<div> Hello World </div>`のようにテキストコンテンツのみ存在する場合は 最適化を行うため null となります。
+:::
 
 :::details updateHostComponent 関数の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
@@ -587,7 +588,8 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 `reconcileChildren`関数は、子コンポーネントのリコンシリエーションを行うための関数です。
 リコンシリエーションとは、前回のレンダリングと今回のレンダリングでの差分を検出し、フラグをつけていくような処理を指します。
 仕組みは複雑ですが、ざっくりと解説していきたいと思います。
-なお、`reconcileChildren`の取る引数を先程解説しましたが、差分検出にあたって比較される対象は`current.child`と`nextChildren`となります。つまり、既存の Fiber ノードと新しい子コンポーネントの JSX 要素を比較し、差分を検出していくことになります。新しい Fiber ノードは差分検出の後に作成されるため、`workInProgress.child`との比較ではないことに注意してください。
+
+なお、`reconcileChildren`の取る引数を先程解説しましたが、差分検出のための比較対象は`current.child`と`nextChildren`となります。つまり、既存の Fiber ノードと新しい子コンポーネントの JSX 要素を比較し、差分を検出していくことになります。新しい Fiber ノードは差分検出の後に作成されるものですので、`workInProgress.child`との比較をしているわけではないことに注意してください。
 
 ### 共通処理部分
 
@@ -595,7 +597,7 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 この関数ではまず共通処理が実行されます。先程`nextChildren`だったものが`newChild`という引数で渡されています。
 `newChild`は`ReactNode`型をもつオブジェクトなので、どのような特性かによって処理を分岐させます。
 
-場合分けのケースは以下のとおりです。
+場合分けのケースはおよそ以下のとおりです。
 
 1. 最上位が`<></>`のようなフラグメントであり、key が指定されていない場合
 2. オブジェクト型の場合
@@ -634,9 +636,9 @@ return [<div> Hello </div>, <span> World </span>];
 
 #### オブジェクト型・単一要素の場合
 
-通常の単一要素の場合、`reconcileSingleElement 関数を使って差分検出を行います。
+通常の単一要素の場合の差分検出についてみていきます。
 
-ここでまず key の一致を判定し、一致しない場合は既存の子ノードは不要として認識され、子ノードに対して削除フラグを適用します。
+まず key の一致を判定し、一致しない場合は既存の子ノードは不要として認識され、子ノードに対して削除フラグを適用します。
 key が一致している場合、型の判定に進みます。型が一致している場合は既存の Fiber を再利用し、型が一致しない場合は Placement フラグを立てた上で新しい Fiber ノードを作成する処理を行います。
 
 既存の Fiber ノードが存在しない場合または key が一致しない場合は、新しい Fiber ノードを作成し Placement フラグを付与します。
@@ -647,19 +649,22 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 #### オブジェクト型・配列の場合
 
-配列となった要素に対して、位置ベースのマッチングと key ベースのマッチングの二つの方法で差分検出を行います。
+配列となった要素に対しては、位置ベースのマッチングと key ベースのマッチングという二段階方式で差分検出を行います。
 
 ##### 位置ベースのマッチング
 
+第一段階のマッチングは位置ベースのマッチングです。
 位置ベースのマッチングでは、既存の Fiber ノードと新しい子要素の配列を比較し、同じ位置同士でキーと型が一致していることを判定していきます。
 すべて一致した場合、すべての Fiber がそのまま再利用され、そこでマッチングが終了します。一方、一つでも不一致の要素が存在した段階で位置ベースのマッチングは終了します。
 
 もし Fiber ノードの方にマッチング不成立となったノードがあれば、残った Fiber ノードすべてに削除フラグを付与します。
 もし要素の方にマッチング不成立となった要素があれば、残った要素すべてに対して新しい Fiber ノードを作成し Placement フラグを付与します。
 
-双方に対してマッチング不成立の対象が存在する場合、key ベースのマッチングに移行します。
+双方に対してマッチング不成立の対象が存在する場合、第二段階である key ベースのマッチングに移行します。
 
 ##### key ベースのマッチング
+
+第二段階のマッチングは key ベースのマッチングです。
 
 キーベースのマッチングでは、連想配列を使ってマッチングを行います。
 キーが存在する場合はそれを連想配列のキーとして、存在しない場合はインデックスをキーとして利用します。これにより、O(1)の計算量でマッチングを行うことができます。
@@ -678,9 +683,12 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1245
 :::
 
-## completeUnitOfWork 関数: 後処理
+## completeWork 関数: 後処理
 
-## 深さ優先探索
+completeWork 関数では、beginWork 関数で行われた処理の後処理を行います。関数コンポーネントの場合、ここでの処理はほぼ行われません。
+一方 DOM 要素の場合はインスタンスの作成などの後処理が行われます。
+
+## beginWork/completeWork の流れと深さ優先探索
 
 # コミットフェーズ
 
