@@ -526,6 +526,19 @@ bailout が終わった後はハイドレーション等の準備を行います
 最初に`renderWithHooks`関数を用いて、フックを処理しながらコンポーネントのレンダリングを行います。ここで初めて、関数コンポーネントが実行されるというわけです。
 
 関数コンポーネントは、関数を実行して JSX 要素を返すというものです。型で述べると`ReactNode`のいずれかを返す関数となります。つまり`renderWithHooks`関数の戻り値も`ReactNode`のいずれかとなることに留意してください。この戻り値が`nextChildren`として、後のリコンシリエーションに利用されます。
+
+`ReactNode`型がどのような型であるかをざっくりおさらいしておきましょう。以下のいずれかのような型を持ちます。
+
+- ReactElement: 通常の React 要素
+- ReactText: テキストノード (文字列や数値)
+- ReactFragment: 複数の要素をまとめるためのフラグメント
+
+その他、ReactPortal やコンテキストに関連する型もありますが、ここでは主に上記の型を扱います。
+
+:::details ReactNode 型の定義
+https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
+:::
+
 なお、フックの処理については後ほど専用のセクションで詳しく解説します。
 
 更に、関数コンポーネント特有の bailout 処理を行います。条件は以下のとおりです。
@@ -557,8 +570,11 @@ DOM 要素の場合、`updateHostComponent`関数が呼び出されます。
 
 - `current`: 現在の Fiber ツリーのノード
 - `workInProgress`: 現在のレンダリングで作成される予定の Fiber ツリーのノード
-- `nextChildren`: DOM 要素の子コンポーネントの JSX 要素
+- `nextChildren`: DOM 要素の子コンポーネントの JSX 要素 (存在していれば)
 - `renderLanes`: レーン (優先度) の値
+
+HostComponent の場合も関数コンポーネントと同様に`nextChildren`が ReactNode 型のオブジェクトとなります。
+余談ですが、`<div> Hello World </div>`のようにテキストコンテンツのみ存在する場合は 最適化のため null となります。
 
 :::details updateHostComponent 関数の実装
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
@@ -573,11 +589,52 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 ### 共通処理部分
 
-まず共通処理として、`reconcileChildFibersImpl`関数が呼び出されます。
+リコンシリエーション処理は`reconcileChildFibers`関数で行われます(React v18.2 の場合。最新バージョンでは変更あり)。
+この関数ではまず共通処理が実行されます。先程`nextChildren`だったものが`newChild`という引数で渡されています。
+`newChild`は`ReactNode`型をもつオブジェクトなので、どのような特性かによって処理を分岐させます。
 
-ここで、
+場合分けのケースは以下のとおりです。
 
-(TODO: ここでの処理の流れを解説)
+1. 最上位が`<></>`のようなフラグメントであり、key が指定されていない場合
+2. オブジェクト型の場合
+   a. 単一要素の場合
+   b. Portal の場合
+   c. 配列型の場合
+   d. 配列の場合
+   e. イテラブルの場合
+3. テキストや数値の場合
+4. null または undefined の場合
+
+主要ケースに絞って解説します。
+
+#### フラグメントの場合
+
+`<></>`のようなフラグメントかつ key が指定されていない場合、フラグメントの Fiber ノードを作成するのは非効率的です。そのため、フラグメントの内部の要素を配列として認識します。
+
+つまり、
+
+```tsx
+return (
+  <>
+    <div> Hello </div>
+    <span> World </span>
+  </>
+);
+```
+
+というコードは、以下のように解釈されます。
+
+```tsx
+return [<div> Hello </div>, <span> World </span>];
+```
+
+このように、フラグメントを最上位に付けてもパフォーマンスに影響が出ないように配慮されています。
+
+#### オブジェクト型・単一要素の場合
+
+#### オブジェクト型・配列の場合
+
+// TODO: v18.2 から最新版にかけてコードが変更されているが、v18.2 に準拠するように解説を行う
 
 ### 初回レンダリングの場合
 
@@ -585,6 +642,10 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 初回レンダリングなので、すべてのノードに「新規作成 (Placement)」フラグを立てるのも非効率的です。そのため、ノードには基本的にフラグを立てずに進行していきます。また、削除されるべきノードも存在しないため、削除の処理は行われません。
 
 ### 二回目以降のレンダリングの場合
+
+:::details reconcileChildren の実装
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1245
+:::
 
 ## 深さ優先探索
 
