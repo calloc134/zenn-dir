@@ -1012,13 +1012,132 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 ## completeWork 関数: 後処理
 
-completeWork 関数では、beginWork 関数で行われた処理の後処理を行います。関数コンポーネントの場合、ここでの処理はほぼ行われません。
+completeWork 関数では、beginWork 関数で行われた処理の後処理を行います。関数コンポーネントの場合、特有の処理は特に行われません。
 
 一方、 DOM 要素の場合はインスタンスの作成などの後処理が行われます。初回レンダリングの場合、DOM ノードを新規作成して`stateNode`プロパティに格納します。
 二回目以降のレンダリングの場合、専用の関数を利用して処理を行います。
-内容としてはシンプルで、現在の props (memoizedProps)と新しい props を比較し、プロパティが変更されているときは Update フラグを立てます。
+
+専用の関数では、まず現在の props (memoizedProps)と新しい props を比較し、一致している場合はノードを変更せずに終了します。
+
+プロパティが変更されているときは、DOM のどの属性を変更すべきかを分析してから Fiber ノードの更新用キューに更新内容を保存し、更新が必要なことを示すフラグを付与します。
 
 最後に共通処理として、子の Fiber ノードのフラグ・レーンなどのプロパティを親の Fiber ノードに OR 演算でマージします。
+
+:::details completeWork 関数の実装
+
+completeWork 関数も全体的に巨大な関数です。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L849-L1598
+
+しかし、FunctionComponent の場合は非常にシンプルです。
+
+```ts
+  switch (workInProgress.tag) {
+    ...
+    case FunctionComponent:
+      bubbleProperties(workInProgress);
+      return null;
+```
+
+`bubbleProperties`関数は単に子 Fiber ノードのフラグやレーンを親の Fiber ノードにマージする関数です。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L860-L872
+
+一方、HostComponent の場合は複雑です。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L959-L1045
+
+初回レンダリングの場合は以下の処理となります。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L975-L1042
+
+ハイドレーションに関する処理は省略します。基本的に以下で DOM ノードを新規作成し、`stateNode`プロパティに格納します。
+
+```ts
+const instance = createInstance(
+  type,
+  newProps,
+  rootContainerInstance,
+  currentHostContext,
+  workInProgress
+);
+
+appendAllChildren(instance, workInProgress, false, false);
+
+workInProgress.stateNode = instance;
+```
+
+また、Ref の更新が必要な場合は`markRef`関数を用いてフラグを立てます。
+
+```ts
+if (workInProgress.ref !== null) {
+  // If there is a ref on a host node we need to schedule a callback
+  markRef(workInProgress);
+}
+```
+
+二回目以降のレンダリングの場合は以下の処理となります。
+
+```ts
+if (current !== null && workInProgress.stateNode != null) {
+  updateHostComponent(
+    current,
+    workInProgress,
+    type,
+    newProps,
+    rootContainerInstance,
+  );
+
+  if (current.ref !== workInProgress.ref) {
+    markRef(workInProgress);
+  }
+```
+
+updateHostComponent 関数については以下のとおりです。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L252C3-L292C5
+
+まず Props を単純に比較し、一致している場合はスキップします。
+
+```ts
+const oldProps = current.memoizedProps;
+if (oldProps === newProps) {
+  // In mutation mode, this is sufficient for a bailout because
+  // we won't touch this node even if children changed.
+  return;
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L261C1-L266C6
+
+その後、DOM のプロパティ差分を取得して更新用キューに追加した後、更新が必要であるフラグを付与します。
+
+```ts
+const updatePayload = prepareUpdate(
+  instance,
+  type,
+  oldProps,
+  newProps,
+  rootContainerInstance,
+  currentHostContext,
+);
+// TODO: Type this specific to this type of component.
+workInProgress.updateQueue = (updatePayload: any);
+// If the update payload indicates that there is a change or if there
+// is a new ref we mark this as an update. All the work is done in commitWork.
+if (updatePayload) {
+  markUpdate(workInProgress);
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L277C1-L291C6
+
+ここまで実行すると updateHostComponent 関数が終わり、また戻ってきます。
+最後に Ref が変更されている場合は、`markRef`関数を用いてフラグを立てます。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L963-L974
+
+:::
 
 ## beginWork/completeWork の流れと深さ優先探索
 
