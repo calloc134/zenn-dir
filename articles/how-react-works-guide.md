@@ -1261,7 +1261,3 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
 興味がある方はこれらについて調査してみても面白いかもしれません。
 
 # 終わりに
-
-```
-
-```
