@@ -472,6 +472,20 @@ https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Sche
 
 performUnitOfWork 関数で、ループを利用しながらそれぞれの Fiber ノードを処理していきます。
 
+初回レンダリングと再レンダリングで状況は変わりますが、現在処理すべき Fiber ノードがなくなるまでループをするという動作を行います。すべて処理が終わると`null`となるため、ループは終了します。
+加えて後者の場合、レンダー処理を中断すべきかどうかを判断するフラグも同時に確認します。このようにすることでスケジューラの指示のとおりにレンダーフェーズを中断することができます。
+
+:::details performUnitOfWork の実装
+
+こちらが初回レンダリングの場合の関数`workLoopSync`の実装です。
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741-L1746
+
+こちらは再レンダリングの場合の関数`workLoopConcurrent`の実装です。
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829-L1834
+
+workInProgress というのは単に「現在処理すべき Fiber ノード」を指す変数です。すべて処理が終わると`null`となるため、ループは終了します。
+両者の違いは主に`shouldYield`関数を実行して中断すべきかを確認するかどうかです。
+
 ```ts
 while (workInProgress !== null) {
   performUnitOfWork(workInProgress);
@@ -484,13 +498,6 @@ while (workInProgress !== null || shouldYield()) {
 }
 ```
 
-初回レンダリングと再レンダリングで状況は変わりますが、workInProgress というのは単に「現在処理すべき Fiber ノード」を指す変数です。すべて処理が終わると`null`となるため、ループは終了します。
-加えて後者の場合、レンダー処理を中断すべきかどうかを判断するフラグも同時に確認します。このようにすることでスケジューラの指示のとおりにレンダーフェーズを中断することができます。
-
-:::details performUnitOfWork の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
-
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829
 :::
 
 performUnitOfWork 関数内部では、beginWork 関数と completeWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
