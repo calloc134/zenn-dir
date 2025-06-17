@@ -1021,7 +1021,7 @@ completeWork 関数では、beginWork 関数で行われた処理の後処理を
 
 プロパティが変更されているときは、DOM のどの属性を変更すべきかを分析してから Fiber ノードの更新用キューに更新内容を保存し、更新が必要なことを示すフラグを付与します。
 
-最後に共通処理として、子の Fiber ノードのフラグ・レーンなどのプロパティを親の Fiber ノードに OR 演算でマージします。
+最後に共通処理として、子の Fiber ノードのフラグ・レーンなどのプロパティを親の Fiber ノードに OR 演算でマージし、completeWork 処理が終了します。
 
 :::details completeWork 関数の実装
 
@@ -1157,6 +1157,90 @@ beginWork と completeWork の処理の流れは、深さ優先探索 (Depth-Fir
 この通りにノードを巡回することで、Fiber ツリーそれぞれに対して一回ずつ beginWork と completeWork が呼び出されることを確認できます。
 
 以上にしてすべての Fiber ノードに対して beginWork と completeWork が呼び出されると、レンダーフェーズが終了します。
+
+:::details ノード探索の流れ
+
+performUnitOfWork 関数の内容は以下から確認できます。ただし、performUnitOfWork 関数自体がループであることに加え、completeUnitOfWork 関数自体もループになっており、非常に処理の流れが分かりづらいです。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1836C1-L1862C2
+
+また、completeUnitOfWork 関数の内容は以下から確認できます。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1864C1-L1961C2
+
+`performUnitOfWork`関数の外にある`workLoopXXX`関数は、ノードがなくなるまでループします。
+
+`performUnitOfWork`関数では、Fiber ツリーを下向きに探索していきます。
+
+```ts
+function performUnitOfWork(unitOfWork: Fiber): void {
+  const current = unitOfWork.alternate;
+  next = beginWork(current, unitOfWork, subtreeRenderLanes);
+  // beginWork の結果 next (子ノード)が得られる
+  if (next === null) {
+    completeUnitOfWork(unitOfWork);
+  } else {
+    workInProgress = next;
+  }
+  ReactCurrentOwner.current = null;
+}
+```
+
+- 子ノードがある場合は対象ノードを子ノードにセット
+- 子ノードがない場合は completeUnitOfWork のループに移動
+
+`completeUnitOfWork`関数では、Fiber ノードを上向きに確認しながら、兄弟も含めて探索します。
+
+```ts
+function completeUnitOfWork(unitOfWork: Fiber): void {
+  let completedWork = unitOfWork;
+  do {
+    const current = completedWork.alternate;
+    const returnFiber = completedWork.return;
+
+    if ((completedWork.flags & Incomplete) === NoFlags) {
+      // completeWork 処理
+      next = completeWork(current, completedWork, subtreeRenderLanes);
+      if (next !== null) {
+        // completeWork から子孫ノードへの追加作業が返ってきた場合
+        workInProgress = next;
+        return;
+      }
+    } else {
+      // エラー時アンワインド処理。例外なので省略
+    }
+
+    // 兄弟ノードがあれば、そこを次に処理
+    const siblingFiber = completedWork.sibling;
+    if (siblingFiber !== null) {
+      workInProgress = siblingFiber;
+      return;
+    }
+    // 兄弟ノードもなければ親ノードに戻ってループ
+    completedWork = returnFiber;
+    workInProgress = completedWork;
+  } while (completedWork !== null);
+
+  // ルートまでたどり着いたら終了ステータス更新
+  if (workInProgressRootExitStatus === RootInProgress) {
+    workInProgressRootExitStatus = RootCompleted;
+  }
+}
+```
+
+- まず completeWork を実行
+- 兄弟ノードがあれば兄弟ノードに移動して beginWork に戻る
+- 兄弟ノードがなければ親に戻って completeWork ループを続ける
+- 一番根本の Fiber ノードにたどり着けばレンダリング自体を終了
+
+といった流れになることがわかります。これらをすべて総合させると、先程のアルゴリズムのようになります。
+なお、
+
+- completeWork から子ノードへの追加作業があった場合は beginWork に戻る
+
+処理については非同期的にレンダリングしている場合に起こる現象なのかなと思います。
+
+:::
 
 # コミットフェーズ
 
