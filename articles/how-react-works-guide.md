@@ -992,27 +992,16 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 第二段階のマッチングは key ベースのマッチングです。
 
 キーベースのマッチングでは、連想配列を使ってマッチングを行います。
-キーが存在する場合はそれを連想配列のキーとして、存在しない場合はインデックスをキーとして利用します。これにより、O(1)の計算量でマッチングを行うことができます。
-マッチした場合は Fiber ノードを再利用します。
+キーが存在する場合はそれを連想配列のキーとして、存在しない場合はインデックスをキーとして利用します。これにより、連想配列の作成に O(N)、要素の照合に O(1)の計算量でマッチングを行うことができます。
+マッチした場合、再利用できるのであれば alternate プロパティなどを利用して Fiber ノードを再利用します。
+マッチングが終了した後、先ほどと同じく残っている Fiber ノードは削除フラグを付与し、残っている新しい子要素は新規作成して Placement フラグを付与します。
 
-:::details 配列のリコンシリエーションの実装
+:::details 配列の key ベースのマッチングの実装
 
-実質的な処理は`reconcileChildFibers`関数に委譲されます。
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L857-L894
 
-```ts
-if (isArray(newChild)) {
-  return reconcileChildrenArray(
-    returnFiber,
-    currentFirstChild,
-    newChild,
-    lanes
-  );
-}
-```
+(TODO: ここはもう少し詳しく解説したい)
 
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1301-L1308
-
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L736-L901
 :::
 
 ### 初回レンダリングの場合
@@ -1069,3 +1058,7 @@ beginWork と completeWork の処理の流れは、深さ優先探索 (Depth-Fir
 興味がある方はこれらについて調査してみても面白いかもしれません。
 
 # 終わりに
+
+```
+
+```
