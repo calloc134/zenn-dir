@@ -185,7 +185,7 @@ https://scrapbox.io/fsubal/%E3%80%8C%E4%BB%AE%E6%83%B3DOM%E3%80%8D%E3%81%A8%E3%8
 Fiber ノードは、React のコンポーネントの状態を表現するためのオブジェクトであり、以下のような情報を持っています。
 
 :::details Fiber ノードの定義
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactInternalTypes.js#L67
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactInternalTypes.js#L67
 :::
 
 ## 基本的なプロパティ
@@ -307,7 +307,7 @@ deletions は、削除されるべき Fiber ノードのリストを保持する
 ![](/images/how-react-works-guide/2025-06-16-17-28-09.png)
 
 :::details `FiberRootNode`の作成部分の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberRoot.new.js#L134
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberRoot.new.js#L134
 :::
 
 ここで、`FiberRootNode`以下に連なる Fiber ツリーの構造について説明します。
@@ -344,7 +344,7 @@ React では、優先度を「Lanes (レーン)」と呼ばれる概念で管理
 この優先度の概念は、React のレンダリングのスケジューリングにおいて重要な役割を果たします。是非覚えておいてください。
 
 :::details レーンの定義
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberLane.new.js#L36
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberLane.new.js#L36
 :::
 
 # React のレンダリング手法の歴史
@@ -433,7 +433,7 @@ React のタスクキューには二種類が存在し、それぞれ異なる�
 `scheduleCallback`というメソッド内部で実際にタスクをキューに登録する処理が行われます。この内部でタスクオブジェクトが生成され、タスクが優先度付きキューに登録されます。
 
 :::details タスク作成の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L345
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L345
 :::
 
 React はタスクをキューに登録する際に、優先度(レーン)からスケジューリング優先度を導出します。
@@ -442,7 +442,7 @@ React はタスクをキューに登録する際に、優先度(レーン)から
 この際、ソートに利用するキーとして、`taskQueue`の場合はタスクの開始予定時刻(`startTime`)を、`timerQueue`の場合はタスクの期限切れ時刻(`expirationTime`、つまり開始予定時刻 + タイムアウト値)を利用します。
 
 :::details タスク登録の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L343
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L343
 :::
 
 ここからは次のスケジュールフェーズへと移行します。
@@ -457,7 +457,7 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 この処理の結果またタスクが発生するようであれば、再度タスクをキューに登録し、ループを繰り返します。
 
 :::details スケジュールフェーズの実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L189
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L189
 :::
 
 このコールバック関数が実行されることで、React のレンダーフェーズが開始されます。
@@ -488,9 +488,9 @@ while (workInProgress !== null || shouldYield()) {
 加えて後者の場合、レンダー処理を中断すべきかどうかを判断するフラグも同時に確認します。このようにすることでスケジューラの指示のとおりにレンダーフェーズを中断することができます。
 
 :::details performUnitOfWork の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
 
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1829
 :::
 
 performUnitOfWork 関数内部では、beginWork 関数と completeWork 関数の二つの関数が呼び出されます。処理の流れは一定のアルゴリズムに従っており、深さ優先探索のような形で Fiber ツリーを探索しながら処理を行います。このアルゴリズムは後ほど解説を行います。
@@ -498,13 +498,13 @@ performUnitOfWork 関数内部では、beginWork 関数と completeWork 関数�
 beginWork 関数はレンダリングと差分検知、completeWork は後処理を行う立ち位置となります。
 
 :::details performUnitOfWork の処理の流れ
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1741
 :::
 
 ではまず、beginWork 関数について見ていきましょう。
 
 :::details beginWork 関数の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3685
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3685
 :::
 
 ## beginWork 関数: 更新の検出と bailout の試行
@@ -514,13 +514,20 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 レンダリングが二回目以降である場合、前回のレンダリングで渡された Props と今回のレンダリングで渡された Props が`同じオブジェクトを参照しているかを確認します。
 一致していなければ更新されたと判断され、更新が必要ないということを特殊な変数に記録します。ここでは処理を軽量にするため浅い比較を行っています。
 
-また、コンテキストの変更があるか、状態更新があるか、その他更新が必要かどうかを判断するため、追加のチェックが行われます。この追加のチェックにも合格した場合、最終的に更新が必要でないと判断され、この時点で更新をスキップするような機構が働きます。この機構のことを「bailout (ベイルアウト)」と呼びます。
+また、
+
+- コンテキストの変更があるか
+- 状態の更新があるか
+- その他更新が必要かどうか
+
+を判断するため、追加のチェックが行われます。
+この追加のチェックにも合格した場合、最終的に更新が必要でないと判断され、この時点で更新をスキップするような機構が働きます。この機構のことを「bailout (ベイルアウト)」と呼びます。
 bailout の条件を満たす場合、必要最低限のノードのコピーを行った上で Fiber ノードの計算を丸ごとスキップします。具体的な処理は複雑であるためここでは詳しく解説しませんが、処理を最適化する機構があるということだけ覚えておいてください。
 
 :::details beginWork 関数の該当処理
 
 二回目移行のレンダリングであればこちらの処理。
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3708-L3753
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3708-L3753
 
 ```ts
     const oldProps = current.memoizedProps;
@@ -556,15 +563,48 @@ bailout の処理は複雑だったため読解を断念。
 
 ## beginWork 関数: コンポーネントに応じたレンダリング処理
 
-次に、大きな Switch 文で Fiber ノードの tag の値に応じた処理を行います。ここでは関数コンポーネント (FunctionComponent) と DOM 要素 (HostComponent) に絞って処理を解説します。
+次に Fiber ノードのレーンを初期化した後、大きな Switch 文で Fiber ノードの tag の値に応じた処理を行います。ここでは関数コンポーネント (FunctionComponent) と DOM 要素 (HostComponent) に絞って処理を解説します。
 
-関数コンポーネントの場合のおおまかな流れを解説します。
+:::details beginWork 関数の Switch 文の一部
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L3778-L3952
+
+まずレーンを初期化、つまり NoLane を代入した後、クソデカ Switch 文が始まります。
+
+```ts
+switch (workInProgress.tag) {
+  case FunctionComponent: {
+    const Component = workInProgress.type;
+    const unresolvedProps = workInProgress.pendingProps;
+    const resolvedProps =
+      workInProgress.elementType === Component
+        ? unresolvedProps
+        : resolveDefaultProps(Component, unresolvedProps);
+    return updateFunctionComponent(
+      current,
+      workInProgress,
+      Component,
+      resolvedProps,
+      renderLanes
+    );
+  }
+  case HostComponent: {
+    return updateHostComponent(current, workInProgress, renderLanes);
+  }
+  // 他のケース...
+}
+```
+
+case 文の中では、基本的に関連するプロパティを移し替えた後、それぞれの担当の関数に引き継ぎする形で処理が行われています。
+
+:::
+
+ここで、関数コンポーネントの場合のおおまかな実行(レンダリング)の流れを見ていきます。
 最初に、コンポーネントを実行するための関数`renderWithHooks`を用いて、フックを処理しつつコンポーネントのレンダリングを行います。ここで初めて、関数コンポーネントが実行されるというわけです。
 
 関数コンポーネントの定義は関数を実行して JSX 要素を返すというものです。つまり`ReactNode`型に含まれるいずれの要素を返す関数となります。したがって、`renderWithHooks`関数の戻り値も`ReactNode`型のいずれかの要素となります。この戻り値が`nextChildren`として、後のリコンシリエーションに利用されます。
 
 :::message
-`renderWithHooks`内部でどのようにフックを処理しているかの詳細は、後ほど専用のセクションで詳しく解説します。
+`renderWithHooks`が内部でどのようにフックを処理しているかの詳細は、後ほど専用のセクションで詳しく解説します。
 :::
 
 `ReactNode`型がどのような型であるかをざっくりおさらいしておきましょう。以下のいずれかのような型を持ちます。
@@ -579,7 +619,8 @@ bailout の処理は複雑だったため読解を断念。
 https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
 :::
 
-更に最適化のため、関数コンポーネント特有の bailout 処理を行います。条件は以下のとおりです。
+更に最適化のため、関数コンポーネント特有の bailout 処理を行います。
+先程の bailout はコンポーネントのタイプに関連なく条件が厳密でしたが、こちらの bailout は少し緩い条件で行われます。条件は以下のとおりです。
 
 - 初回レンダリングでなく、前回の Fiber ツリーが存在している
 - フックやコンポーネントの Props が変更されていない
@@ -597,7 +638,7 @@ https://github.com/facebook/react/blob/v18.2.0/packages/shared/ReactTypes.js
 リコンシリエーション処理の詳細は後ほど解説します。
 
 :::details updateFunctionComponent 関数の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L951
 :::
 
 次に、DOM 要素の場合の処理を見ていきます。
@@ -618,7 +659,7 @@ HostComponent の場合も関数コンポーネントと同様に`nextChildren`�
 :::
 
 :::details updateHostComponent 関数の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
 :::
 
 ## beginWork 関数: 差分検知 (リコンシリエーション) 処理
@@ -682,7 +723,7 @@ key が一致している場合、型の判定に進みます。型が一致し�
 既存の Fiber ノードが存在しない場合または key が一致しない場合は、新しい Fiber ノードを作成し Placement フラグを付与します。
 
 :::details 新規 Fiber ノードの作成部分の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L359
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L359
 :::
 
 #### オブジェクト型・配列の場合
@@ -718,7 +759,7 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 (TODO)
 
 :::details reconcileChildren の実装
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1245
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1245
 :::
 
 ## completeWork 関数: 後処理
