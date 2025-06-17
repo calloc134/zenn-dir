@@ -185,7 +185,9 @@ https://scrapbox.io/fsubal/%E3%80%8C%E4%BB%AE%E6%83%B3DOM%E3%80%8D%E3%81%A8%E3%8
 Fiber ノードは、React のコンポーネントの状態を表現するためのオブジェクトであり、以下のような情報を持っています。
 
 :::details Fiber ノードの定義
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactInternalTypes.js#L67
+
+以下の型定義を参考にしました。型定義は TypeScript ではなく、Flow という記法で記述されています。
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactInternalTypes.js#L67C1-L194C4
 :::
 
 ## 基本的なプロパティ
@@ -295,6 +297,37 @@ flags は更新に関するフラグを表現するプロパティです。現�
 フラグはレーンと同じくすべてビットマスクの二進数で表現されており、レーンと同じく複数のフラグを OR 演算で組み合わせて表現することができます。
 subtreeFlags は、子ノードから渡されたフラグを集約したプロパティです。子ノードの flags を OR 演算でマージしたものがここに格納されます。
 
+:::details flags の定義
+
+以下のコードで定義されています。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberFlags.js#L14C1-L32C80
+
+```ts
+// Don't change these two values. They're used by React Dev Tools.
+export const NoFlags = /*                      */ 0b00000000000000000000000000;
+export const PerformedWork = /*                */ 0b00000000000000000000000001;
+
+// You can change the rest (and add more).
+export const Placement = /*                    */ 0b00000000000000000000000010;
+export const Update = /*                       */ 0b00000000000000000000000100;
+export const Deletion = /*                     */ 0b00000000000000000000001000;
+export const ChildDeletion = /*                */ 0b00000000000000000000010000;
+export const ContentReset = /*                 */ 0b00000000000000000000100000;
+export const Callback = /*                     */ 0b00000000000000000001000000;
+export const DidCapture = /*                   */ 0b00000000000000000010000000;
+export const ForceClientRender = /*            */ 0b00000000000000000100000000;
+export const Ref = /*                          */ 0b00000000000000001000000000;
+export const Snapshot = /*                     */ 0b00000000000000010000000000;
+export const Passive = /*                      */ 0b00000000000000100000000000;
+export const Hydrating = /*                    */ 0b00000000000001000000000000;
+export const Visibility = /*                   */ 0b00000000000010000000000000;
+export const StoreConsistency = /*             */ 0b00000000000100000000000000;
+... (省略) ...
+```
+
+:::
+
 ### deletions
 
 deletions は、削除されるべき Fiber ノードのリストを保持するプロパティです。実際は Fiber ノードの配列となっており、差分検出の際に追加され実際の DOM に反映する際に参照されます。
@@ -307,7 +340,22 @@ deletions は、削除されるべき Fiber ノードのリストを保持する
 ![](/images/how-react-works-guide/2025-06-16-17-28-09.png)
 
 :::details `FiberRootNode`の作成部分の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberRoot.new.js#L134
+
+`createFiberRoot`関数の内部で作成されます。この関数は`createRoot`関数の内部で呼び出されます。
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberRoot.new.js#L134C1-L210C2
+
+実際に`FiberRootNode`が作成される部分は以下のコードです。
+
+```ts
+  const root: FiberRoot = (new FiberRootNode(
+    containerInfo,
+    tag,
+    hydrate,
+    identifierPrefix,
+    onRecoverableError,
+  ): any);
+```
+
 :::
 
 ここで、`FiberRootNode`以下に連なる Fiber ツリーの構造について説明します。
@@ -320,6 +368,26 @@ Fiber ツリーの根本ノードは、`HostRoot`と呼ばれるタグを持つ 
 `current`ツリーは現在表示されている UI 状態を表現する Fiber ツリーであり、「一つ前のレンダリングで作成した仮想 DOM」に相当します。
 `FiberRootNode` の`current`プロパティにおいて、この`current`ツリーを参照しています。
 `workInProgress`ツリーは、現在のレンダリングで作成されている Fiber ツリーであり、「新しくレンダリングで作成する最中の仮想 DOM」に相当します。`FiberRootNode` に該当するプロパティは存在しませんが、レンダリングの処理中に変数として存在します。
+
+:::details `current`の`HostRoot`の作成部分の実装
+
+先程の`createFiberRoot`関数の続きに存在します。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberRoot.new.js#L167C1-L173C39
+
+```ts
+const uninitializedFiber = createHostRootFiber(
+  tag,
+  isStrictMode,
+  concurrentUpdatesByDefaultOverride
+);
+root.current = uninitializedFiber;
+uninitializedFiber.stateNode = root;
+```
+
+`HostRoot`の Fiber ノードを作成した後、current に登録しています。余談として、`HostRoot`ノードの`stateNode`プロパティには`FiberRootNode`への参照が登録されます。
+
+:::
 
 レンダーフェーズで`workInProgress`を構築し終わった後、コミットフェーズで`workInProgress`の内容を実 DOM に適用し終わると、`current`プロパティの参照先を`workInProgress`Fiber ツリーの根本に当たる Fiber ノードに切り替えます。
 したがってその特性上、current プロパティの Fiber ツリーの内容は常に実 DOM の UI と一致しています。
@@ -344,7 +412,28 @@ React では、優先度を「Lanes (レーン)」と呼ばれる概念で管理
 この優先度の概念は、React のレンダリングのスケジューリングにおいて重要な役割を果たします。是非覚えておいてください。
 
 :::details レーンの定義
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberLane.new.js#L36
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberLane.new.js#L34C1-L82C94
+
+およそ以下のような定義となっています。
+
+```ts
+
+export const TotalLanes = 31;
+
+export const NoLanes: Lanes = /*                        */ 0b0000000000000000000000000000000;
+export const NoLane: Lane = /*                          */ 0b0000000000000000000000000000000;
+
+export const SyncLane: Lane = /*                        */ 0b0000000000000000000000000000001;
+
+export const InputContinuousHydrationLane: Lane = /*    */ 0b0000000000000000000000000000010;
+export const InputContinuousLane: Lane = /*             */ 0b0000000000000000000000000000100;
+
+export const DefaultHydrationLane: Lane = /*            */ 0b0000000000000000000000000001000;
+export const DefaultLane: Lane = /*                     */ 0b0000000000000000000000000010000;
+... (省略) ...
+```
+
+二進数の表現で優先度を定義しており、各ビットが異なる優先度を表現しています。
 :::
 
 # React のレンダリング手法の歴史
