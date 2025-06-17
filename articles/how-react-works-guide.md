@@ -704,7 +704,50 @@ HostComponent の場合も関数コンポーネントと同様に`nextChildren`�
 :::
 
 :::details updateHostComponent 関数の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426-L1459
+
+最初にハイドレーション処理などを行った後、関連要素(`type`や 現在の Props、新しい Props、子要素など)を設定します。
+
+```ts
+const type = workInProgress.type;
+const nextProps = workInProgress.pendingProps;
+const prevProps = current !== null ? current.memoizedProps : null;
+
+let nextChildren = nextProps.children;
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1437-L1441
+
+次に、子要素をテキストとして扱うべきかを判定し、処理を行います。これは最適化の一貫であるため省略します。
+
+```ts
+const isDirectTextChild = shouldSetTextContent(type, nextProps);
+
+if (isDirectTextChild) {
+  // We special case a direct text child of a host node. This is a common
+  // case. We won't handle it as a reified child. We will instead handle
+  // this in the host environment that also has access to this prop. That
+  // avoids allocating another HostText fiber and traversing it.
+  nextChildren = null;
+} else if (prevProps !== null && shouldSetTextContent(type, prevProps)) {
+  // If we're switching from a direct text child to a normal child, or to
+  // empty, we need to schedule the text content to be reset.
+  workInProgress.flags |= ContentReset;
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1442-L1454
+
+最後に markRef 関数を用いて ref 更新に追従できるようフラグを設定してから、関数コンポーネントと同様にリコンシリエーションを行います。
+
+```ts
+markRef(current, workInProgress);
+reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+return workInProgress.child;
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1456-L1458
+
 :::
 
 ## beginWork 関数: 差分検知 (リコンシリエーション) 処理
