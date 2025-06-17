@@ -736,11 +736,40 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 ## beginWork 関数: 差分検知 (リコンシリエーション) 処理
 
-`reconcileChildren`関数は、子コンポーネントのリコンシリエーションを行うための関数です。
 リコンシリエーションとは、前回のレンダリングと今回のレンダリングでの差分を検出し、フラグをつけていくような処理を指します。
 仕組みは複雑ですが、ざっくりと解説していきたいと思います。
 
-なお、`reconcileChildren`の取る引数を先程解説しましたが、差分検出のための比較対象は`current.child`と`nextChildren`となります。つまり、既存の Fiber ノードと新しい子コンポーネントの JSX 要素を比較し、差分を検出していくことになります。新しい Fiber ノードは差分検出の後に作成されるものですので、`workInProgress.child`との比較をしているわけではないことに注意してください。
+差分検出は、既存の Fiber ノードと新しい子コンポーネントの JSX 要素を比較しながら進めていきます。新しい Fiber ノードは差分検出の段階で作成されて Fiber ツリーに追加されていくことになります。
+
+:::details リコンシリエーションの実装
+
+リコンシリエーション処理は`reconcileChildren`関数から始まります。
+ここは v18.2.0 の実装であり、最新バージョンでは変更が存在することを事前にお詫びします。ここでは v18.2.0 に基づいて解説します。
+
+```ts
+if (current === null) {
+  workInProgress.child = mountChildFibers(
+    workInProgress,
+    null,
+    nextChildren,
+    renderLanes
+  );
+} else {
+  workInProgress.child = reconcileChildFibers(
+    workInProgress,
+    current.child,
+    nextChildren,
+    renderLanes
+  );
+}
+```
+
+current が null、つまり初回レンダリングの場合は、`mountChildFibers`関数を用いて子ノードをマウントします。二回目以降なら`reconcileChildFibers`関数を用いて子ノードの差分検出を行います。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L288-L319
+
+なお関数の呼び出しの通り、差分検出のための比較対象は`current.child`と`nextChildren`となります。この二つで差分検出を行い、必要な Fiber ノードが`workInProgress`ツリーに追加されていくという流れになります。
+:::
 
 ### 共通処理部分
 
