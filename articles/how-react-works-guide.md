@@ -686,7 +686,12 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 ## completeWork 関数: 後処理
 
 completeWork 関数では、beginWork 関数で行われた処理の後処理を行います。関数コンポーネントの場合、ここでの処理はほぼ行われません。
-一方 DOM 要素の場合はインスタンスの作成などの後処理が行われます。
+
+一方、 DOM 要素の場合はインスタンスの作成などの後処理が行われます。初回レンダリングの場合、DOM ノードを新規作成して`stateNode`プロパティに格納します。
+二回目以降のレンダリングの場合、専用の関数を利用して処理を行います。
+内容としてはシンプルで、現在の props (memoizedProps)と新しい props を比較し、プロパティが変更されているときは Update フラグを立てます。
+
+最後に共通処理として、子の Fiber ノードのフラグ・レーンなどのプロパティを親の Fiber ノードに OR 演算でマージします。
 
 ## beginWork/completeWork の流れと深さ優先探索
 
