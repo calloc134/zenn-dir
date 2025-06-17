@@ -779,7 +779,9 @@ export const mountChildFibers = ChildReconciler(false);
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1349-L1350
 
-この`ChildReconciler`関数は React 屈指の巨大関数であり、差分検出のアルゴリズムを実装しています。後ほど解説します。
+この`ChildReconciler`関数は React 屈指の巨大関数であり、差分検出のアルゴリズムを実装しています。後ほど解説します。余談ですが、最新版の React ではこの関数は`createChildReconciler`という名前に変わっているようです。
+
+https://github.com/facebook/react/blob/6b7e207cabe4c1bc9390d862dd9228e94e9edf4b/packages/react-reconciler/src/ReactChildFiber.js#L387C10-L387C31
 :::
 
 ### 共通処理部分
