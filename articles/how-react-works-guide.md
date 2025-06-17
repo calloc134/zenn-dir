@@ -1137,6 +1137,9 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCompleteWork.new.js#L963-L974
 
+気になる点: React v18.2 に`prepareUpdate`関数が存在しない？この PR で削除されている。
+https://github.com/facebook/react/pull/26583
+
 :::
 
 ## beginWork/completeWork の流れと深さ優先探索
