@@ -867,7 +867,7 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 `alternate`プロパティの判定とは、過去の Fiber ツリーで対応するノードが存在せず、再利用できないことを意味します。
 これらの条件を満たした場合、新規作成すべき Fiber ノードであると判断され、Placement フラグが付与されます。
 
-:::details 新規 Fiber ノードの作成部分の実装
+:::details 単一要素のリコンシリエーションの実装
 
 実質的な処理は`placeSingleChild`関数に委譲されます。
 
@@ -914,13 +914,78 @@ function placeSingleChild(newFiber: Fiber): Fiber {
 ##### 位置ベースのマッチング
 
 第一段階のマッチングは位置ベースのマッチングです。
-位置ベースのマッチングでは、既存の Fiber ノードと新しい子要素の配列を比較し、同じ位置同士でキーと型が一致していることを判定していきます。
-すべて一致した場合、すべての Fiber がそのまま再利用され、そこでマッチングが終了します。一方、一つでも不一致の要素が存在した段階で位置ベースのマッチングは終了します。
+位置ベースのマッチングでは、N 番目の既存の Fiber ノードと新しい子要素の配列を比較し、同じ位置同士でキーと型が一致していることをループで判定していきます。
 
-もし Fiber ノードの方にマッチング不成立となったノードがあれば、残った Fiber ノードすべてに削除フラグを付与します。
-もし要素の方にマッチング不成立となった要素があれば、残った要素すべてに対して新しい Fiber ノードを作成し Placement フラグを付与します。
+すべての位置について Fiber ノードと新しい子要素の型が一致している場合、マッチングは成功したと判断され、その時点で終了します。
 
-双方に対してマッチング不成立の対象が存在する場合、第二段階である key ベースのマッチングに移行します。
+一方、不一致の要素が存在した場合、以下の三つのケースに分岐します。
+
+- 新しい子要素のみが枯渇 (A)
+- 既存の Fiber ノードのみが枯渇 (B)
+- 両者ともに枯渇していない (C)
+
+ケース A のように要素が枯渇した場合、余剰な Fiber ノードを削除する必要があるため、残った Fiber ノードすべてに削除フラグを付与し、終了します。
+ケース B のように Fiber ノードが枯渇した場合、Fiber ノードを新規作成する必要があるため、残った要素すべてに対して新しい Fiber ノードを作成し Placement フラグを付与して終了します。
+
+一方ケース C のように古い Fiber も新しい子要素も枯渇していない場合、位置ベースのマッチングは失敗したと判断されます。
+その場合、第二段階である key ベースのマッチングに移行します。
+
+:::details 配列の位置ベースのマッチングの実装
+
+位置ベースのマッピングの処理は以下の部分です。
+位置ベースで updateSlot を用いて一致するか照合を行い、deleteChild 関数で削除フラグの付与、placeChild 関数で新しい Fiber ノードのフラグを付与していきます。Fiber ノードを新しく作成するので sibling プロパティなども忘れずに設定します。
+
+```ts
+for (; oldFiber !== null && newIdx < newChildren.length; newIdx++) {
+  if (oldFiber.index > newIdx) {
+    nextOldFiber = oldFiber;
+    oldFiber = null;
+  } else {
+    nextOldFiber = oldFiber.sibling;
+  }
+  const newFiber = updateSlot(
+    returnFiber,
+    oldFiber,
+    newChildren[newIdx],
+    lanes
+  );
+  if (newFiber === null) {
+    // TODO: This breaks on empty slots like null children. That's
+    // unfortunate because it triggers the slow path all the time. We need
+    // a better way to communicate whether this was a miss or null,
+    // boolean, undefined, etc.
+    if (oldFiber === null) {
+      oldFiber = nextOldFiber;
+    }
+    break;
+  }
+  if (shouldTrackSideEffects) {
+    if (oldFiber && newFiber.alternate === null) {
+      // We matched the slot, but we didn't reuse the existing fiber, so we
+      // need to delete the existing child.
+      deleteChild(returnFiber, oldFiber);
+    }
+  }
+  lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+  if (previousNewFiber === null) {
+    // TODO: Move out of the loop. This only happens for the first run.
+    resultingFirstChild = newFiber;
+  } else {
+    // TODO: Defer siblings if we're not at the right index for this slot.
+    // I.e. if we had null values before, then we want to defer this
+    // for each null value. However, we also don't want to call updateSlot
+    // with the previous one.
+    previousNewFiber.sibling = newFiber;
+  }
+  previousNewFiber = newFiber;
+  oldFiber = nextOldFiber;
+}
+```
+
+(TODO: ここはもう少し詳しく解説したい)
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L777-L820
+:::
 
 ##### key ベースのマッチング
 
@@ -930,6 +995,26 @@ function placeSingleChild(newFiber: Fiber): Fiber {
 キーが存在する場合はそれを連想配列のキーとして、存在しない場合はインデックスをキーとして利用します。これにより、O(1)の計算量でマッチングを行うことができます。
 マッチした場合は Fiber ノードを再利用します。
 
+:::details 配列のリコンシリエーションの実装
+
+実質的な処理は`reconcileChildFibers`関数に委譲されます。
+
+```ts
+if (isArray(newChild)) {
+  return reconcileChildrenArray(
+    returnFiber,
+    currentFirstChild,
+    newChild,
+    lanes
+  );
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1301-L1308
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L736-L901
+:::
+
 ### 初回レンダリングの場合
 
 初回レンダリングの場合、内部で`mountChildFibers`関数が呼び出されます。
@@ -938,10 +1023,6 @@ function placeSingleChild(newFiber: Fiber): Fiber {
 ### 二回目以降のレンダリングの場合
 
 (TODO)
-
-:::details reconcileChildren の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1245
-:::
 
 ## completeWork 関数: 後処理
 
