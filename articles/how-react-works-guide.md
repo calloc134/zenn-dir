@@ -575,7 +575,7 @@ https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/
 
 HostComponent の場合も関数コンポーネントと同様に`nextChildren`が ReactNode 型のオブジェクトとなります。
 
-::::::message
+:::message
 余談ですが、`<div> Hello World </div>`のようにテキストコンテンツのみ存在する場合は 最適化を行うため null となります。
 :::
 
