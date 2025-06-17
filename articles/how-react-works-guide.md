@@ -779,16 +779,25 @@ export const mountChildFibers = ChildReconciler(false);
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1349-L1350
 
-この`ChildReconciler`関数は React 屈指の巨大関数であり、差分検出のアルゴリズムを実装しています。後ほど解説します。余談ですが、最新版の React ではこの関数は`createChildReconciler`という名前に変わっているようです。
+この`ChildReconciler`関数は リコンシリエーションを行うための関数を生成し返却する高階関数です。React 屈指の巨大な関数となっています。余談ですが、最新版の React ではこの関数は`createChildReconciler`という名前に変わっているようです。
 
 https://github.com/facebook/react/blob/6b7e207cabe4c1bc9390d862dd9228e94e9edf4b/packages/react-reconciler/src/ReactChildFiber.js#L387C10-L387C31
 :::
 
 ### 共通処理部分
 
-リコンシリエーション処理は`reconcileChildFibers`関数で行われます(React v18.2 の場合。最新バージョンでは変更あり)。
+リコンシリエーション処理は非常に巨大な関数で書かれています。解説が必要な部分に絞って進めていきます。
+
 この関数ではまず共通処理が実行されます。先程`nextChildren`だったものが`newChild`という引数で渡されています。
 `newChild`は`ReactNode`型をもつオブジェクトなので、どのような特性かによって処理を分岐させます。
+
+:::details 共通処理部分の実装
+
+共通処理は主に`reconcileChildFibers`関数の中で行われます。余談ですが、最新の React ではこの関数は存在せず、`reconcileChildFibersImpl`関数がこの役割を担っています。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1245-L1344
+
+:::
 
 場合分けのケースはおよそ以下のとおりです。
 
@@ -827,17 +836,75 @@ return [<div> Hello </div>, <span> World </span>];
 
 このように、フラグメントを最上位に付けてもパフォーマンスに影響が出ないように配慮されています。
 
+:::details フラグメントの処理部分の実装
+
+フラグメントが配列のように変換されていることがわかる部分の実装です。
+
+```ts
+const isUnkeyedTopLevelFragment =
+  typeof newChild === "object" &&
+  newChild !== null &&
+  newChild.type === REACT_FRAGMENT_TYPE &&
+  newChild.key === null;
+if (isUnkeyedTopLevelFragment) {
+  newChild = newChild.props.children;
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1256-L1266
+
+:::
+
 #### オブジェクト型・単一要素の場合
 
 通常の単一要素の場合の差分検出についてみていきます。
 
-まず key の一致を判定し、一致しない場合は既存の子ノードは不要として認識され、子ノードに対して削除フラグを適用します。
-key が一致している場合、型の判定に進みます。型が一致している場合は既存の Fiber を再利用し、型が一致しない場合は Placement フラグを立てた上で新しい Fiber ノードを作成する処理を行います。
+ここで、以下の条件の判定を行います。
 
-既存の Fiber ノードが存在しない場合または key が一致しない場合は、新しい Fiber ノードを作成し Placement フラグを付与します。
+- 二回目以降のレンダリングの場合
+- `alternate`プロパティが存在しない場合 (つまり新規作成の場合)
+
+`alternate`プロパティの判定とは、過去の Fiber ツリーで対応するノードが存在せず、再利用できないことを意味します。
+これらの条件を満たした場合、新規作成すべき Fiber ノードであると判断され、Placement フラグが付与されます。
 
 :::details 新規 Fiber ノードの作成部分の実装
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L359
+
+実質的な処理は`placeSingleChild`関数に委譲されます。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1269-L1279
+
+```ts
+if (typeof newChild === 'object' && newChild !== null) {
+  switch (newChild.$$typeof) {
+    case REACT_ELEMENT_TYPE:
+      return placeSingleChild(
+        reconcileSingleElement(
+          returnFiber,
+          currentFirstChild,
+          newChild,
+          lanes,
+        ),
+      );
+
+    ...
+  }
+}
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L359-L366
+
+```ts
+function placeSingleChild(newFiber: Fiber): Fiber {
+  if (shouldTrackSideEffects && newFiber.alternate === null) {
+    newFiber.flags |= Placement;
+  }
+  return newFiber;
+}
+```
+
+`shouldTrackSideEffects`は初回レンダリングで false、二回目以降のレンダリングで true となります。
+そのため、前述の通りの条件判定が行えるようになっています。
+
 :::
 
 #### オブジェクト型・配列の場合
