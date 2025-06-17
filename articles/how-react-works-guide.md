@@ -301,7 +301,7 @@ subtreeFlags は、子ノードから渡されたフラグを集約したプロ�
 
 以下のコードで定義されています。
 
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberFlags.js#L14C1-L32C80
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberFlags.js#L14C1-L32C80
 
 ```ts
 // Don't change these two values. They're used by React Dev Tools.
@@ -412,7 +412,7 @@ React では、優先度を「Lanes (レーン)」と呼ばれる概念で管理
 この優先度の概念は、React のレンダリングのスケジューリングにおいて重要な役割を果たします。是非覚えておいてください。
 
 :::details レーンの定義
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactFiberLane.new.js#L34C1-L82C94
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberLane.new.js#L34C1-L82C94
 
 およそ以下のような定義となっています。
 
@@ -528,7 +528,7 @@ React はタスクをキューに登録する際に、優先度に応じてタ�
 
 `unstable_scheduleCallback`というメソッド内部で実際にタスクをキューに登録する処理が行われます。この内部でタスクオブジェクトが生成され、タスクが優先度付きキューに登録されます。
 
-https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/scheduler/src/forks/Scheduler.js#L345
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L345
 
 まず現在の時刻を取得し、次にタスクの開始時刻を決定します。
 また優先度によってタイムアウト値を決定します。この優先度はレーンから導出されています。導出の処理はこの関数ではない部分で行われているようです。
@@ -646,7 +646,7 @@ else {
 この処理の結果またタスクが発生するようであれば、再度タスクをキューに登録し、ループを繰り返します。
 
 :::details スケジュールフェーズの実装
-https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L189
+https://github.com/facebook/react/blob/v18.2.0/packages/scheduler/src/forks/Scheduler.js#L189C1-L244C2
 :::
 
 このコールバック関数が実行されることで、React のレンダーフェーズが開始されます。
