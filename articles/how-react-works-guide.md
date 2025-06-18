@@ -1562,6 +1562,11 @@ React は、DOM に変更を適用することも含め、副作用として扱�
 
 コミットフェーズが始まる前に、今まで`workInProgress`として保持していたツリーについて`finishedWork`という名前をつけ、FiberRootNode の`finishedWork`プロパティに格納します。また、ツリー全体のレーンも`lanes`プロパティに格納します。
 
+:::message
+この実装は React v18.2.0 に基づきます。最新の実装では`FiberRootNode`に`finishedWork`プロパティは存在しないようです。
+
+:::
+
 まず、現在すでにレンダーフェーズまたはコミットフェーズが実行されていないことを確認してから、新しい Fiber ツリーとレーンの値を取得します。念の為に、ここで新しい Fiber ツリーが null でなく、current の内容と異なることを確認します。Fiber ツリーが null の場合は単に終了しますが、current の内容と全く同じ場合は例外を投げます。
 
 準備が整ったら、実際に DOM への適用を行います。Fiber ツリーのそれぞれのノードに存在する「Placement」「Update」「Deletion」などのフラグを確認し、DOM の変更を適用します。
