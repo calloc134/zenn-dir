@@ -1096,10 +1096,11 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 :::
 
 次に、DOM 要素の場合の処理を見ていきます。
-まず適切な最適化処理を行った後、Fiber ノードが ref プロパティを持っている場合は今後実行されるコミットフェーズにおいて`ref.current`が更新されるよう、マークをしておきます。
-その後、関数コンポーネントと同じく`reconcileChildren`関数を用いて子コンポーネントのリコンシリエーションを行います。
 
-引数は関数コンポーネントと同じく以下のとおりです。
+まず適切な最適化処理を行った後、Fiber ノードが ref プロパティを持っている場合は今後実行されるコミットフェーズにおいて`ref.current`が更新されるよう、マークをしておきます。
+その後、関数コンポーネントと同じく子コンポーネントのリコンシリエーションを行います。
+
+利用するパラメータは関数コンポーネントと同じく以下のとおりです。
 
 - `current`: 現在の Fiber ツリーのノード
 - `workInProgress`: 現在のレンダリングで作成される予定の Fiber ツリーのノード
@@ -1115,6 +1116,7 @@ HostComponent の場合も関数コンポーネントと同様に`nextChildren`�
 :::details updateHostComponent 関数の実装
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1426-L1459
 
+複雑な処理や意図のよくわからない処理が多かったため、ざっくり解説します。
 最初にハイドレーション処理などを行った後、関連要素(`type`や 現在の Props、新しい Props、子要素など)を設定します。
 
 ```ts
@@ -1131,7 +1133,7 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1442-L1454
 
-最後に markRef 関数を用いて ref 更新に追従できるようフラグを設定してから、関数コンポーネントと同様にリコンシリエーションを行います。
+最後に markRef 関数を用いて ref 更新に追従できるようフラグを設定してから、関数コンポーネントと同様に`reconcileChildren`関数を用いてリコンシリエーションを行います。
 
 ```ts
 markRef(current, workInProgress);
@@ -1141,14 +1143,17 @@ return workInProgress.child;
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberBeginWork.new.js#L1456-L1458
 
+正直、処理が読み解けているかどうか不安な部分です。
+
 :::
 
 ## beginWork 関数: 差分検知 (リコンシリエーション) 処理
 
-リコンシリエーションとは、前回のレンダリングと今回のレンダリングでの差分を検出し、フラグをつけていくような処理を指します。
-仕組みは複雑ですが、ざっくりと解説していきたいと思います。
+リコンシリエーションとは、前回のレンダリングと今回のレンダリングでの差分を検出し、フラグをつけていくような処理を指します。仕組みは複雑ですが、ざっくりと解説していきたいと思います。
 
 差分検出は、既存の Fiber ノードと新しい子コンポーネントの JSX 要素を比較しながら進めていきます。新しい Fiber ノードは差分検出の段階で作成されて Fiber ツリーに追加されていくことになります。
+
+TODO: イラスト
 
 :::details リコンシリエーションの実装
 
@@ -1243,7 +1248,9 @@ return (
 return [<div> Hello </div>, <span> World </span>];
 ```
 
-このように、フラグメントを最上位に付けてもパフォーマンスに影響が出ないように配慮されています。
+このように、複数要素を囲むためのフラグメントを最上位に付けてもパフォーマンスに影響が出ないよう配慮されています。
+
+TODO: イラスト
 
 :::details フラグメントの処理部分の実装
 
@@ -1268,17 +1275,20 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 通常の単一要素の場合の差分検出についてみていきます。
 
-ここで、以下の条件の判定を行います。
+<!-- ここで、以下の条件の判定を行います。
 
 - 二回目以降のレンダリングの場合
 - `alternate`プロパティが存在しない場合 (つまり新規作成の場合)
 
 `alternate`プロパティの判定とは、過去の Fiber ツリーで対応するノードが存在せず、再利用できないことを意味します。
-これらの条件を満たした場合、新規作成すべき Fiber ノードであると判断され、Placement フラグが付与されます。
+
+これらの条件を満たした場合、新規作成すべき Fiber ノードであると判断され、Placement フラグが付与されます。 -->
+
+( TODO: 間違っているので修正 )
 
 :::details 単一要素のリコンシリエーションの実装
 
-実質的な処理は`placeSingleChild`関数に委譲されます。
+実質的な処理は`reconcileSingleElement`関数と`placeSingleChild`関数に委譲されます。
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L1269-L1279
 
@@ -1299,6 +1309,14 @@ if (typeof newChild === 'object' && newChild !== null) {
   }
 }
 ```
+
+`reconcileSingleElement` 関数は、単一の要素に対して差分検出を行う関数です。ここでは、要素の型や key を確認し、既存の Fiber ノードと比較して差分を検出します。
+
+( TODO)
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1129C1-L1204C4
+
+PlaceSingleChild 関数は以下のように実装されています。
 
 https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L359-L366
 
