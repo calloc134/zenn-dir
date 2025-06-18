@@ -753,11 +753,30 @@ if (currentTask !== null) {
 
 :::
 
-このコールバック関数が実行されることで、React のレンダーフェーズが開始されます。
+このコールバック関数が実行されることで、React のレンダーフェーズとコミットフェーズが実行されていきます。
 
 # レンダーフェーズ
 
 ここから、React のレンダリングのメイン部分であるレンダーフェーズについて解説していきます。ここで、コンポーネントのレンダリングを実際に行いながら差分検知を行います。なお、React では差分検知のことを「Reconciliation (リコンシリエーション)」と呼んでいます。
+
+:::details レンダーフェーズが実行されるまで
+
+スケジュールフェーズのコールバック関数から呼び出しが始まります。コールバック関数の内容は、初回レンダリングのとき`performSyncWorkOnRoot`関数、二回目以降のレンダリングは`performConcurrentWorkOnRoot`関数となります。
+この二つの関数はレンダーフェーズとコミットフェーズを実行するためのエントリーポイントとなります。
+
+`performSyncWorkOnRoot`関数からは`renderRootSync`関数が呼び出され、その内部で`workLoopSync`関数が呼び出されます。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1229C1-L1288C2
+packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1663C1-L1738C1
+
+`performConcurrentWorkOnRoot`関数からは`renderRootSync`関数か`renderRootConcurrent`関数のどちらかが呼び出されます。後者の場合、その内部から`workLoopConcurrent`関数が呼び出されます。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L829C1-L965C2
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1748C1-L1827C1
+
+なお、この二種類の`performXXXWorkOnRoot`関数は後ほどコミットフェーズを解説する際に再度登場します。
+
+:::
 
 レンダーの具体的な処理は、`performUnitOfWork`関数の中で行われます。
 
@@ -1538,14 +1557,139 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
 # コミットフェーズ
 
 では、実際に DOM に変更を適用するコミットフェーズについて解説します。
+React は、DOM に変更を適用することも含め、副作用として扱います。コミットフェーズは副作用の適用を行うフェーズということです。
+このコミットフェーズでは`useEffect`や`useLayoutEffect`などの副作用フックによる副作用の実行処理も大きな割合を占めますが、フックの解説については後ほど行います。したがって、副作用フックに由来する副作用の実行処理はここではすべて省略します。
+
+コミットフェーズが始まる前に、今まで`workInProgress`として保持していたツリーについて`finishedWork`という名前をつけ、FiberRootNode の`finishedWork`プロパティに格納します。また、ツリー全体のレーンも`lanes`プロパティに格納します。
+
+まず、現在すでにレンダーフェーズまたはコミットフェーズが実行されていないことを確認してから、新しい Fiber ツリーとレーンの値を取得します。念の為に、ここで新しい Fiber ツリーが null でなく、current の内容と異なることを確認します。Fiber ツリーが null の場合は単に終了しますが、current の内容と全く同じ場合は例外を投げます。
+
+準備が整ったら、実際に DOM への適用を行います。Fiber ツリーのそれぞれのノードに存在する「Placement」「Update」「Deletion」などのフラグを確認し、DOM の変更を適用します。
+
+DOM への適用がすべて終わった後、FiberRootNode の`current`プロパティに`finishedWork`をセットします。これにより、今まで`workInProgress`として構築していたツリーがついに`current`として昇格されました。次回以降はこの Fiber ツリーが`current`として利用されるのです。
+
+後はブラウザのペイント要求やコンテキストの復元などを行い、スケジューリングの調節処理などを行った後、コミットフェーズが終了します。
+
+このようにして実際に UI が反映されます。非常に長い解説でしたが、ようやく終了です。お疲れ様でした！
+
+:::details コミットフェーズの実装
+
+スケジュールフェーズで`performSyncWorkOnRoot`関数や`performConcurrentWorkOnRoot`関数が呼び出されることは以前に確認しました。これらの関数はレンダーフェーズとコミットフェーズを実行するための関数であることは確認済みです。したがってレンダーフェーズが終了した後、コミットフェーズが実行されます。
+
+初回か二回目以降かで処理が分岐しますが、具体的な流れは省略します。
+どちらも同じ様に前処理をしていることだけ確認しておきます。
+
+```ts
+const finishedWork: Fiber = (root.current.alternate: any);
+root.finishedWork = finishedWork;
+root.finishedLanes = lanes;
+commitRoot(
+  root,
+  workInProgressRootRecoverableErrors,
+  workInProgressTransitions,
+);
+```
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1229C1-L1288C2
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L829C1-L966C1
+
+`commitRootImpl`関数でコミットフェーズが実行されます。副作用フック関連についてはすべて省略します。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L1990C1-L2350C2
+
+コンテキストの確認を行い、すでにレンダーフェーズまたはコミットフェーズが実行されていないことを確認します。また、`finishedWork`と`finishedLanes`プロパティの値を変数に格納します。
+
+```ts
+if ((executionContext & (RenderContext | CommitContext)) !== NoContext) {
+  throw new Error("Should not already be working.");
+}
+const finishedWork = root.finishedWork;
+const lanes = root.finishedLanes;
+```
+
+`finishedWork`の値が正しいことを確認します。`finishedWork`が null の場合はコミットフェーズを終了し、`current`の内容と同じ場合は例外を投げます。
+
+```ts
+if (finishedWork === null) {
+  ...(省略)...
+  return null;
+}
+
+if (finishedWork === root.current) {
+  throw new Error(
+    'Cannot commit the same tree as before. This error is likely caused by ' +
+      'a bug in React. Please file an issue.',
+  );
+}
+```
+
+色々な処理がありますが、ここでは DOM の変更を適用するための処理に絞って解説します。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L2162C1-L2176C33
+
+`commitMutationEffects`関数を呼び出して、実際に副作用の適用を行います。Fiber ツリー上の「Placement」「Update」「Deletion」などのフラグを確認し、DOM の変更を適用します。
+
+`commitMutationEffects`関数についてもみてみましょう。
+
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactFiberCommitWork.new.js#L2036C1-L2050C2
+
+内部で`commitMutationEffectsOnFiber`関数を呼び出しています。主な処理はこちらにあります。
+
+(TODO: ここはもう少し詳しく解説したい)
+
+これにより、レンダーフェーズで構築した Fiber ツリーの変更がすべて DOM に適用されます。
+
+`resetAfterCommit`関数はブラウザのフォーカスなどをリセットするための関数です。
+すべて DOM ツリーに適用が終われば、`root.current`に`finishedWork`をセットします。つまり、今まで`workInProgress`として構築していたツリーが、実際の DOM に適用され、ようやく`current`として昇格されたということです。
+
+```ts
+// The next phase is the mutation phase, where we mutate the host tree.
+commitMutationEffects(root, finishedWork, lanes);
+
+if (enableCreateEventHandleAPI) {
+  if (shouldFireAfterActiveInstanceBlur) {
+    afterActiveInstanceBlur();
+  }
+}
+resetAfterCommit(root.containerInfo);
+
+// The work-in-progress tree is now the current tree. This must come after
+// the mutation phase, so that the previous tree is still current during
+// componentWillUnmount, but before the layout phase, so that the finished
+// work is current during componentDidMount/Update.
+root.current = finishedWork;
+```
+
+以後、ブラウザへのペイント要求やコンテキストの復元などが存在しますが、すべて省略します。
+
+:::
 
 # フックの動作
+
+(TODO: ここはまだ書いていません。今後執筆を進めます。)
+
+# 終わりに
+
+ここまで、React のレンダリングについての仕組みを解説してきました。
+非常に巨大な関数も存在し、日本語文献も非常に少なく、ソースコードの読解には苦労しましたが、できるだけうまく正確に伝わるよう解説してみました。
+
+ソースコードリーディングを通して、自分も無意識下に勘違いしていた挙動の認識を改められたように感じます。自分は過去に、仮想 DOM と実 DOM の差分を検知するものだと考えていました。実際には、仮想 DOM と実 DOM の差分を検知するのではなく、仮想 DOM 同士の差分を検知して実 DOM に適用するらしい、ということを知りました。
+
+React のソースコードは巨大であり、読まなくても当然アプリケーションを実装できるものではあります。React 開発チームもソースコードを読むことを推奨していません。しかし、ソースコードを読むことで、React の挙動をより深く理解できることに間違いはありません。
+
+今回の解説ではそれぞれの実装についてソースコードも引用しながら解説をしています。実際に挙動が気になった方は、これを参考に是非ソースコードを読んでみてください。
+
+最後に Meta の React 開発チームの皆様へ。
+ソースコードの解釈が間違っていれば是非ご指摘ください。非常に助かります。
+そして素晴らしいライブラリを提供していただき、ありがとうございます。これからも React の発展を楽しみにしています！
 
 # 今回解説をスキップしたところ
 
 今回の解説では、以下のような内容をスキップしました。
 
 - 関数コンポーネント・DOM 要素以外の Fiber ノードの処理
+- デバッグ環境
 - ハイドレーションに関連する処理
 - レンダリングの中断と再開に関連する処理
 - レンダリングの中止に関連する処理
@@ -1553,4 +1697,22 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
 
 興味がある方はこれらについて調査してみても面白いかもしれません。
 
-# 終わりに
+# 参考文献
+
+今回参考にさせていただいた文献や記事を紹介します。
+
+https://deepwiki.com/facebook/react
+
+deepwiki.com は Devin の提供するサービスであり、GitHub で管理されているソースコードを自動的に解析して AI によるチャットや内部の分析ドキュメントを提供します。今回のリーディングにも非常に役立ちました。
+
+https://zenn.dev/ktmouk/articles/68fefedb5fcbdc
+
+最初に React の内部構造を理解しようとした際、非常に参考になりました。バッジも送っています。ありがとうございました。
+
+https://jser.dev/series/react-source-code-walkthrough
+https://incepter.github.io/how-react-works/
+
+主に参考にした海外のソースコードリーディング記事です。英語ですが、非常に詳しく解説されています。
+
+個人的に日本語訳を行っています。
+https://calloc134.github.io/how-react-works/
