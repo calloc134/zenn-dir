@@ -1312,7 +1312,7 @@ if (typeof newChild === 'object' && newChild !== null) {
 
 `reconcileSingleElement` 関数は、単一の要素に対して差分検出を行う関数です。ここでは、要素の型や key を確認し、既存の Fiber ノードと比較して差分を検出します。
 
-( TODO)
+( TODO: 処理を解説 )
 
 https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1129C1-L1204C4
 
@@ -1352,14 +1352,39 @@ function placeSingleChild(newFiber: Fiber): Fiber {
 - 両者ともに枯渇していない (C)
 
 ケース A のように要素が枯渇した場合、余剰な Fiber ノードを削除する必要があるため、残った Fiber ノードすべてに削除フラグを付与し、終了します。
-ケース B のように Fiber ノードが枯渇した場合、Fiber ノードを新規作成する必要があるため、残った要素すべてに対して新しい Fiber ノードを作成し Placement フラグを付与して終了します。
+ケース B のように Fiber ノードが枯渇した場合、Fiber ノードを新規作成する必要があるため、残った要素すべてに対して新しい Fiber ノードを作成し `Placement` フラグを付与して終了します。
 
 一方ケース C のように古い Fiber も新しい子要素も枯渇していない場合、位置ベースのマッチングは失敗したと判断されます。
 その場合、第二段階である key ベースのマッチングに移行します。
 
+TODO: イラスト
+
 :::details 配列の位置ベースのマッチングの実装
 
+以下の部分から配列のリコンサイルが始まります。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L1301C1-L1308C8
+
+```ts
+if (isArray(newChild)) {
+  return reconcileChildrenArray(
+    returnFiber,
+    currentFirstChild,
+    newChild,
+    lanes
+  );
+}
+```
+
+`reconcileChildrenArray`関数は、配列の要素に対してリコンシリエーションを行う関数です。
+
+https://github.com/facebook/react/blob/9e3b772b8cabbd8cadc7522ebe3dde3279e79d9e/packages/react-reconciler/src/ReactChildFiber.new.js#L736C1-L902C1
+
+抜粋して紹介します。
+
 位置ベースのマッピングの処理は以下の部分です。
+https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L777-L820
+
 位置ベースで updateSlot を用いて一致するか照合を行い、deleteChild 関数で削除フラグの付与、placeChild 関数で新しい Fiber ノードのフラグを付与していきます。Fiber ノードを新しく作成するので sibling プロパティなども忘れずに設定します。
 
 ```ts
@@ -1411,7 +1436,6 @@ for (; oldFiber !== null && newIdx < newChildren.length; newIdx++) {
 
 (TODO: ここはもう少し詳しく解説したい)
 
-https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/ReactChildFiber.new.js#L777-L820
 :::
 
 ##### key ベースのマッチング
@@ -1419,9 +1443,13 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 第二段階のマッチングは key ベースのマッチングです。
 
 キーベースのマッチングでは、連想配列を使ってマッチングを行います。
+
 キーが存在する場合はそれを連想配列のキーとして、存在しない場合はインデックスをキーとして利用します。これにより、連想配列の作成に O(N)、要素の照合に O(1)の計算量でマッチングを行うことができます。
-マッチした場合、再利用できるのであれば alternate プロパティなどを利用して Fiber ノードを再利用します。
-マッチングが終了した後、先ほどと同じく残っている Fiber ノードは削除フラグを付与し、残っている新しい子要素は新規作成して Placement フラグを付与します。
+
+マッチした場合、再利用できるのであれば `alternate` プロパティなどを利用して Fiber ノードを再利用します。
+マッチングが終了した後、先ほどと同じく残っている Fiber ノードは削除フラグを付与し、残っている新しい子要素は新規作成して `Placement` フラグを付与します。
+
+TODO: イラスト
 
 :::details 配列の key ベースのマッチングの実装
 
@@ -1435,7 +1463,7 @@ https://github.com/facebook/react/blob/v18.2.0/packages/react-reconciler/src/Rea
 
 以上により、フラグメント、単一要素、配列の要素に対するリコンシリエーション処理を解説しました。
 リコンシリエーションの処理は非常に複雑ですが、基本的には上記のような流れで行われています。
-ここまででようやく beginWork 関数の処理が終わりました。次は completeWork 関数の処理を見ていきます。
+ここまででようやく `beginWork` 関数の処理が終わりました。次は `completeWork` 関数の処理を見ていきます。
 
 ## completeWork 関数: 後処理
 
@@ -1444,12 +1472,14 @@ completeWork 関数では、beginWork 関数で行われた処理の後処理を
 一方、 DOM 要素の場合はインスタンスの作成などの後処理が行われます。初回レンダリングの場合、DOM ノードを新規作成して`stateNode`プロパティに格納します。
 二回目以降のレンダリングの場合、専用の関数を利用して処理を行います。
 
-専用の関数では、まず現在の props (memoizedProps)と新しい props を比較し、一致している場合はノードを変更せずに終了します。
+処理が複雑なので簡略化しますが、まず現在の props (memoizedProps)と新しい props を比較し、一致している場合はノードを変更せずに終了します。
 
 プロパティが変更されているときは、DOM のどの属性を変更すべきかを分析してから Fiber ノードの更新用キューに更新内容を保存し、更新が必要なことを示すフラグを付与します。
 
 最後に共通処理として、子の Fiber ノードのフラグ・レーンなどのプロパティを親の Fiber ノードに OR 演算でマージしていき、completeWork 処理が終了します。
 このマージ処理によって、Fiber ツリーの根本のノードは最終的にすべての子ノードの特性がマージされたフラグ・レーンを持つことになります。
+
+TODO: イラスト
 
 :::details completeWork 関数の実装
 
@@ -1586,6 +1616,8 @@ beginWork と completeWork の処理の流れは、深さ優先探索 (Depth-Fir
 
 以上にしてすべての Fiber ノードに対して beginWork と completeWork が呼び出されると、レンダーフェーズが終了します。
 
+TODO: イラスト
+
 :::details ノード探索の流れ
 
 performUnitOfWork 関数の内容は以下から確認できます。ただし、performUnitOfWork 関数自体がループであることに加え、completeUnitOfWork 関数自体もループになっており、非常に処理の流れが分かりづらいです。
@@ -1673,7 +1705,8 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
 # コミットフェーズ
 
 では、実際に DOM に変更を適用するコミットフェーズについて解説します。
-React は、DOM に変更を適用することも含め、副作用として扱います。コミットフェーズは副作用の適用を行うフェーズということです。
+React は、DOM に変更を適用することも含め、副作用として扱います。つまり、コミットフェーズは副作用の適用を行うフェーズということです。
+
 このコミットフェーズでは`useEffect`や`useLayoutEffect`などの副作用フックによる副作用の実行処理も大きな割合を占めますが、フックの解説については後ほど行います。したがって、副作用フックに由来する副作用の実行処理はここではすべて省略します。
 
 コミットフェーズが始まる前に、今まで`workInProgress`として保持していたツリーについて`finishedWork`という名前をつけ、FiberRootNode の`finishedWork`プロパティに格納します。また、ツリー全体のレーンも`lanes`プロパティに格納します。
@@ -1685,9 +1718,15 @@ React は、DOM に変更を適用することも含め、副作用として扱�
 
 まず、現在すでにレンダーフェーズまたはコミットフェーズが実行されていないことを確認してから、新しい Fiber ツリーとレーンの値を取得します。念の為に、ここで新しい Fiber ツリーが null でなく、current の内容と異なることを確認します。Fiber ツリーが null の場合は単に終了しますが、current の内容と全く同じ場合は例外を投げます。
 
+TODO: イラスト
+
 準備が整ったら、実際に DOM への適用を行います。Fiber ツリーのそれぞれのノードに存在する「Placement」「Update」「Deletion」などのフラグを確認し、DOM の変更を適用します。
 
+(TODO: もう少し詳細に処理を解説)
+
 DOM への適用がすべて終わった後、FiberRootNode の`current`プロパティに`finishedWork`をセットします。これにより、今まで`workInProgress`として構築していたツリーがついに`current`として昇格されました。次回以降はこの Fiber ツリーが`current`として利用されるのです。
+
+TODO: イラスト
 
 後はブラウザのペイント要求やコンテキストの復元などを行い、スケジューリングの調節処理などを行った後、コミットフェーズが終了します。
 
