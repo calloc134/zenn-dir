@@ -1314,7 +1314,7 @@ if (typeof newChild === 'object' && newChild !== null) {
 }
 ```
 
-`reconcileSingleElement` 関数は、単一の要素に対して差分検出を行う関数です。ここでは、要素の型や key を確認し、既存の Fiber ノードと比較して差分を検出します。
+`reconcileSingleElement` 関数は、単一の要素に対して差分検出を行う関数です。ここでは、要素の型や key を確認し、一致すれば再利用、一致しなければ新規作成を行います。
 
 ( TODO: 処理を解説 )
 
