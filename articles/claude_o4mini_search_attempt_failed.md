@@ -75,7 +75,7 @@ https://hono.dev/docs/helpers/streaming
 
 ## ストリーミング仕様の調査
 
-また Claude Code の通信を中継するにあたって、Claude Code 側のストリーミング仕様と OpenAI Responses API のストリーミング仕様を調査しました。
+Claude Code の通信を中継するにあたって、Claude Code 側のストリーミング仕様と OpenAI Responses API のストリーミング仕様を調査しました。
 
 ### Claude Code 側のストリーミング仕様
 
@@ -139,6 +139,9 @@ OpenAI Responses API では、ストリームは階層構造になっている�
 #### response.created
 
 ストリームの開始を通知するイベントです。ストリーミング開始時の最初の一回のみ送信されます。
+ID やモデル名など、レスポンス全体のメタ情報を含むようです。
+
+https://platform.openai.com/docs/api-reference/responses-streaming/response/created
 
 #### response.output_item.added
 
@@ -146,9 +149,13 @@ OpenAI Responses API では、ストリームは階層構造になっている�
 モデルの出力は、複数の「アイテム」で構成されます。このアイテムにはメッセージブロックやツールの呼び出し結果が含まれます。
 データ内部には output_index が付与され、アイテムの順序を示します。
 
+https://platform.openai.com/docs/api-reference/responses-streaming/response/output_item/added
+
 #### response.output_item.done
 
 該当するアイテムの生成がすべて完了したことを通知するイベントです。
+
+https://platform.openai.com/docs/api-reference/responses-streaming/response/output_item/done
 
 #### response.content_part.added
 
@@ -156,21 +163,31 @@ OpenAI Responses API では、ストリームは階層構造になっている�
 アイテムは、複数の「パート」で構成されます。
 パートには content_index が付与され、アイテム内での順序を示します。また、part_type でパートのタイプを示します。
 
+https://platform.openai.com/docs/api-reference/responses-streaming/response/content_part
+
 #### response.content_part.done
 
 該当するパートの生成がすべて完了したことを通知するイベントです。
+
+https://platform.openai.com/docs/api-reference/responses-streaming/response/content_part/done
 
 #### response.output_text.delta
 
 生成中のテキストの断片を逐次送信するためのイベントです。`delta`に、生成されたテキストの一部が含まれます。
 
+https://platform.openai.com/docs/api-reference/responses-streaming/response/output_text/delta
+
 #### response.output_text.done
 
 今回のパートの最終的なテキスト全体の成果物を通知するイベントです。
 
+https://platform.openai.com/docs/api-reference/responses-streaming/response/output_text/done
+
 #### response.completed
 
 すべてのアイテムおよびパートの生成が完了したことを通知するイベントです。最終的な使用量の情報も含まれます。
+
+https://platform.openai.com/docs/api-reference/webhook-events/response/completed
 
 ### 最終的な実装
 
