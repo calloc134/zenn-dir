@@ -36,9 +36,9 @@ ChatGPT のフロントエンド (ここでは [https://lobechat.com](https://lo
 とりあえず $20 のサブスクの解約と、代わりとして以前から気になっていた Claude Code を契約することを検討しました。しかし、つい先日 ChatGPT Plus 継続購入をしてしまったこともあり、すぐには契約ができないなぁ・・・という状況でした。
 
 ここで、Claude Code の中身のエンドポイントをプロキシし、OpenAI の o4-mini モデルを使うこと、加えて検索機能を有効にすることができれば、能力の高いエージェント型コーディングツールにできるのではないか？と考えました。
-自分は Claude Code を使ったことがないのですが、検索機能が少し貧弱であるというウワサを聞いたことがあったため、その補完としても使えるのではないか？という発想です。
+自分は Claude Code を使ったことがないのですが、検索機能が少し貧弱であるという噂を聞いたことがあったため、その補完としても使えるのではないか？という試みです。
 
-ということで、実際に検討を進めていきました。
+そんなわけで、実際に検討を進めていきました。
 
 # 検討
 
@@ -66,19 +66,76 @@ OpenAI Completion API はテキスト生成の基本的な API であり、一�
 
 # 実装
 
+## フレームワークの選定
+
 今回はストリーミングにおいて SSE を利用するため、フレームワークには Hono を利用しました。
 https://hono.dev/docs/helpers/streaming
 
 ストリーミングを支援するためのヘルパー`streamSSE`を利用し、Claude Code 側のストリーミング仕様に合わせてレスポンスを生成するようにしました。
 
+## ストリーミング仕様の調査
+
 また Claude Code の通信を中継するにあたって、Claude Code 側のストリーミング仕様と OpenAI Responses API のストリーミング仕様を調査しました。
+
+### Claude Code 側のストリーミング仕様
 
 Claude Code 側のストリーミングに関するドキュメントは以下のとおりです。
 https://docs.anthropic.com/en/docs/build-with-claude/streaming
 
+簡単にまとめていきます。
+
+#### message_start
+
+ストリームの開始を通知するイベントです。ストリーミング開始時の最初の一回のみ送信されます。
+
+```
+event: message_start
+data: {"type":"message_start","message":{…}}
+```
+
+#### content_block_start/delta/stop
+
+レスポンス本文を「コンテンツブロック(`content_block`)」という単位に分割して通知するイベントです。
+
+`start`でコンテンツブロックの開始を通知します。その後、`delta`で文字列や JSON の断片を順次送信していきます。最後に`stop`でコンテンツブロックの終了を通知します。
+それぞれのコンテンツブロックには index が付与されており、最終的な配列の位置を示します。
+
+`content_block_delta`には`delta.type`でタイプ情報が含まれます。対応するデータを断片的に送信します。
+
+- `text_delta`: レスポンスのテキストの文字列断片を送信
+- `input_json_delta`: 入力 JSON の断片を送信。部分的な JSON となり、`content_block_stop`が来るまでに組み立てられるようになっている
+
+#### message_delta
+
+`Message`オブジェクトの変更についての通知を行うイベントです。累積トークン使用量`usage`などの情報を含みます。
+
+#### message_stop
+
+すべてのコンテンツブロックの送信が完了したことを通知するイベントです。これにより最終的な`Message`が確定し、ストリーミングが終了したことをクライアントに伝えます。
+
+#### ping
+
+定期的に送信されるイベントで、接続が生きていることを通知するための空イベントです。
+
+### OpenAI Responses API 側のストリーミング仕様
+
 Open AI Responses API 側のストリーミングに関するドキュメントは以下のとおりです。
 https://platform.openai.com/docs/api-reference/responses-streaming
 https://platform.openai.com/docs/guides/streaming-responses?api-mode=responses
+
+### 最終的な実装
+
+実装を進めていくにあたり、型安全に進められるよう、Claude と OpenAI の提供する型定義を積極的に利用しました。ペイロードの内容でエラーになる時間を減らすため、型定義を利用してペイロードの内容を検証してエラーを早期に発見できるようにしています。
+
+https://github.com/calloc134/claude-code-proxy-with-search/blob/43988ebdf04986029accd2414970218a2d748482/index.ts#L1C1-L43C81
+
+とりあえず非ストリームモードは無効にし、ストリームモードのみを実装しています。
+Claude のボディから OpenAI の定義に変換し、これを用いて OpenAI Responses API を呼び出すようにしています。
+ストリームのハンドリング部分は専用の関数に切り出しています。
+
+https://github.com/calloc134/claude-code-proxy-with-search/blob/43988ebdf04986029accd2414970218a2d748482/index.ts#L879C1-L970C4
+
+その他、互換性を保つためのエンドポイントを用意しています。
 
 # 動作確認
 
@@ -250,5 +307,6 @@ o4-mini でクレジットを消費するのがもったいないので`gpt-4.1`
 https://zenn.dev/yoshiko/articles/claude-code-with-o3
 
 Anthropic SSE や OpenAI に詳しい各位、もしよろしければ、この記事を読んでいただき、アドバイスをいただけると幸いです。
+Claude Code でコーディングしたら今回の実装もうまくできるんだろうか？また契約したら試してみたいです。
 
 ここまで読んでいただきありがとうございました。
