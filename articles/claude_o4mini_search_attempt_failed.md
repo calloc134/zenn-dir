@@ -66,7 +66,12 @@ OpenAI Completion API はテキスト生成の基本的な API であり、一�
 
 # 実装
 
-Claude Code の通信を中継するにあたって、Claude Code 側のストリーミング仕様と OpenAI Responses API のストリーミング仕様を調査しました。
+今回はストリーミングにおいて SSE を利用するため、フレームワークには Hono を利用しました。
+https://hono.dev/docs/helpers/streaming
+
+ストリーミングを支援するためのヘルパー`streamSSE`を利用し、Claude Code 側のストリーミング仕様に合わせてレスポンスを生成するようにしました。
+
+また Claude Code の通信を中継するにあたって、Claude Code 側のストリーミング仕様と OpenAI Responses API のストリーミング仕様を調査しました。
 
 Claude Code 側のストリーミングに関するドキュメントは以下のとおりです。
 https://docs.anthropic.com/en/docs/build-with-claude/streaming
@@ -218,6 +223,8 @@ type: "invalid_request_error",
       at makeRequest ([省略]/cloud-code-proxy-with-search/node_modules/openai/client.mjs:427:29)
 ```
 
+これについて調査したのですが、あんまりよくわからない感じです。不勉強を自覚・・・！
+
 # その他気がついたこと
 
 ## o4-mini が思ったより言うことを聞いてくれない
@@ -229,14 +236,11 @@ o4-mini でクレジットを消費するのがもったいないので`gpt-4.1`
 # まとめ
 
 今回は、Claude Code の中身を o4-mini とし、更に検索機能を有効にしてみるという試みを行いましたが、残念ながら成功しませんでした。
+原因としては、自分が OpenAI・Anthropic の双方のストリーム仕様に不慣れであることが原因かなあと思います。とりあえず一旦は実装を諦め、凍結状態にしようかなあと思います。
 
-最終的に、素直に Claude Code を契約しようかな・・・と思いました。おそらく Claude Code を契約してから、以下の記事で紹介されている o3 MCP を使ったほうが幸せになれそうです。
+最終的に、素直に Claude Code を契約しようかな・・・と思いました。Claude Code を契約してから、以下の記事で紹介されている o3 MCP を使ったほうが幸せになれそうです・・・笑
 https://zenn.dev/yoshiko/articles/claude-code-with-o3
 
 Anthropic SSE や OpenAI に詳しい各位、もしよろしければ、この記事を読んでいただき、アドバイスをいただけると幸いです。
 
 ここまで読んでいただきありがとうございました。
-
-```
-
-```
