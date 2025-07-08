@@ -63,3 +63,35 @@ https://github.com/1rgs/claude-code-proxy
 OpenAI Completion API はテキスト生成の基本的な API であり、一般的にこちらが広く利用されています。一方 OpenAI Responses API とは、2025 年 3 月にリリースされた比較的新しい API であり、より高度な機能を提供します。Web 検索機能やファイル検索機能、MCP の呼び出しなどは Responses API でのみ利用可能です。
 
 今回は Web 検索機能を利用したかったため、Responses API を利用する必要がありました。
+そのため、先程のプロジェクトは利用できないことがわかりました。TypeScript を利用し、自分で一から実装する必要があるようです。
+
+# 実装
+
+Claude Code の通信を中継するにあたって、Claude Code 側のストリーミング仕様と OpenAI Responses API のストリーミング仕様を調査しました。
+
+Claude Code 側のストリーミングに関するドキュメントは以下のとおりです。
+https://docs.anthropic.com/en/docs/build-with-claude/streaming
+
+Open AI Responses API 側のストリーミングに関するドキュメントは以下のとおりです。
+https://platform.openai.com/docs/api-reference/responses-streaming
+https://platform.openai.com/docs/guides/streaming-responses?api-mode=responses
+
+https://github.com/calloc134/claude-code-proxy-with-search
+
+# 動作確認
+
+# その他気がついたこと
+
+## o4-mini が思ったより言うことを聞いてくれない
+
+o4-mini が意外と Claude Code 特有のプロンプトに素直に従ってくれないようです。具体的には、クライアントで実行すべきツールをまったく利用してくれず、タスクの実行がすすまないことが多いです (エージェントなのに「このコマンドを実行してください」とユーザに返答してくる等)。
+
+o4-mini でクレジットを消費するのがもったいないので`gpt-4.1`モデルに切り替えたところ、ちゃんとコマンドを実行してくれるようになりました。しかしモデルの能力は o4-mini の方が高いのでなんとか o4-mini を使いたいところです。プロンプト次第で改善できるかもしれません。
+
+# まとめ
+
+素直に Claude Code を契約しようかな・・・と思いました。おそらく Claude Code を契約して o3 MCP を使ったほうが幸せになれそうです。
+https://zenn.dev/yoshiko/articles/claude-code-with-o3
+
+Anthropic SSE や OpenAI に詳しい各位、もし余力があったら完成させてください〜〜〜〜〜
+ここまで読んでいただきありがとうございました。
