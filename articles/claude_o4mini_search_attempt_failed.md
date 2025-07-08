@@ -123,6 +123,55 @@ Open AI Responses API 側のストリーミングに関するドキュメント�
 https://platform.openai.com/docs/api-reference/responses-streaming
 https://platform.openai.com/docs/guides/streaming-responses?api-mode=responses
 
+簡単にまとめていきます。
+
+#### 前提
+
+OpenAI Responses API では、ストリームは階層構造になっているようです。順に次のような入れ子構造を持ちます。
+
+1. `response` (レスポンス全体)
+2. `output_item` (モデル内に複数持てる出力単位)
+3. `content_part` (アイテム内に複数存在するサブ単位)
+4. `delta` (パート内の増分更新単位)
+
+順に見ていきましょう。
+
+#### response.created
+
+ストリームの開始を通知するイベントです。ストリーミング開始時の最初の一回のみ送信されます。
+
+#### response.output_item.added
+
+新しい「アイテム」が生成されたことを通知するイベントです。
+モデルの出力は、複数の「アイテム」で構成されます。このアイテムにはメッセージブロックやツールの呼び出し結果が含まれます。
+データ内部には output_index が付与され、アイテムの順序を示します。
+
+#### response.output_item.done
+
+該当するアイテムの生成がすべて完了したことを通知するイベントです。
+
+#### response.content_part.added
+
+新しい「パート」が生成されたことを通知するイベントです
+アイテムは、複数の「パート」で構成されます。
+パートには content_index が付与され、アイテム内での順序を示します。また、part_type でパートのタイプを示します。
+
+#### response.content_part.done
+
+該当するパートの生成がすべて完了したことを通知するイベントです。
+
+#### response.output_text.delta
+
+生成中のテキストの断片を逐次送信するためのイベントです。`delta`に、生成されたテキストの一部が含まれます。
+
+#### response.output_text.done
+
+今回のパートの最終的なテキスト全体の成果物を通知するイベントです。
+
+#### response.completed
+
+すべてのアイテムおよびパートの生成が完了したことを通知するイベントです。最終的な使用量の情報も含まれます。
+
 ### 最終的な実装
 
 実装を進めていくにあたり、型安全に進められるよう、Claude と OpenAI の提供する型定義を積極的に利用しました。ペイロードの内容でエラーになる時間を減らすため、型定義を利用してペイロードの内容を検証してエラーを早期に発見できるようにしています。
