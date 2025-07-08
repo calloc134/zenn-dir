@@ -90,11 +90,6 @@ https://docs.anthropic.com/en/docs/build-with-claude/streaming#event-types
 
 ストリームの開始を通知するイベントです。ストリーミング開始時の最初の一回のみ送信されます。
 
-```
-event: message_start
-data: {"type":"message_start","message":{…}}
-```
-
 #### content_block_start/delta/stop
 
 レスポンス本文を「コンテンツブロック(`content_block`)」という単位に分割して通知するイベントです。
