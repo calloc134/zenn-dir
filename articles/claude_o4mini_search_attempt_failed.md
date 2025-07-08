@@ -32,12 +32,34 @@ ChatGPT のフロントエンド (ここでは [https://lobechat.com](https://lo
 
 ![](/images/claude_o4mini_search_attempt_failed/2025-07-08-15-09-29.png)
 
-これは使える、と感じました。とりあえず $20 のサブスクの解約を検討しました。同時に、以前から気になっていた Claude Code を契約することを考えました。
+これは使える、と感じました。
+とりあえず $20 のサブスクの解約を検討しました。同時に、以前から気になっていた Claude Code を契約することを考えました。
 しかし、3 日ほど前に継続購入をしてしまったこともあり、すぐには契約ができないな・・・ということを考えました。
 
 ここで、Claude Code の中身のエンドポイントをプロキシし、OpenAI の o4-mini モデルを使うこと、加えて検索機能を有効にすることができれば、能力の高いエージェント型コーディングツールにできるのではないか？と考えました。
 自分は Claude Code を使ったことがないのですが、検索機能が少し貧弱であるというウワサを聞いたことがあったため、その補完としても使えるのではないか？という発想です。
 
-実際に検討を進めていきました。
+ということで、実際に検討を進めていきました。
 
 # 検討
+
+Claude Code には、環境変数 `ANTHROPIC_BASE_URL` と `ANTHROPIC_AUTH_TOKEN` を設定することで、通信先のエンドポイントを差し替えることができる機能が存在します。
+
+例えば、以下のように設定することができます。
+
+```bash
+ANTHROPIC_BASE_URL="http://localhost:8082" ANTHROPIC_AUTH_TOKEN="some-api-key" claude
+```
+
+この機能を利用して o4-mini モデルのエンドポイントをプロキシすることができるのではないか？と考えました。
+
+調査したところ、Claude Code の通信をプロキシして OpenAI のモデルを利用することのできるプロジェクトが既に存在していました。
+
+https://github.com/fuergaosi233/claude-code-proxy
+https://github.com/1rgs/claude-code-proxy
+
+しかしこれらのコードを確認すると、内部で OpenAI Completion API を利用していることがわかりました。
+
+OpenAI Completion API はテキスト生成の基本的な API であり、一般的にこちらが広く利用されています。一方 OpenAI Responses API とは、2025 年 3 月にリリースされた比較的新しい API であり、より高度な機能を提供します。Web 検索機能やファイル検索機能、MCP の呼び出しなどは Responses API でのみ利用可能です。
+
+今回は Web 検索機能を利用したかったため、Responses API を利用する必要がありました。
