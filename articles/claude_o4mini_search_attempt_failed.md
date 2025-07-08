@@ -14,7 +14,7 @@ Claude Code ブーム時代、いかがお過ごしですか？
 Claude Code とは、Anthropic 社が提供するエージェント型コーディングツールです。
 ターミナルから自然言語でコマンドの入力・バグ修正などを行ってくれます。
 
-今回は、そんな Claude Code の中身を、o4-mini と検索機能にしてみようとしたけど**できなかったよ**、という記録を書いていこうと思います。
+今回は、そんな Claude Code の中身を、o4-mini と検索機能にしてみようとしたのですが、残念ながらうまくいきませんでした。不完全ですが、実装の経緯や試行錯誤の内容を共有したいと思います。
 
 # きっかけ
 
@@ -75,9 +75,148 @@ Open AI Responses API 側のストリーミングに関するドキュメント�
 https://platform.openai.com/docs/api-reference/responses-streaming
 https://platform.openai.com/docs/guides/streaming-responses?api-mode=responses
 
+# 動作確認
+
+リポジトリは以下のとおりです。
+
 https://github.com/calloc134/claude-code-proxy-with-search
 
-# 動作確認
+とりあえずプロトタイプなので一枚のファイルで実装しています。正常に動作したあとにリファクタリングを行う予定でした。
+https://github.com/calloc134/claude-code-proxy-with-search/blob/main/index.ts
+
+実際に動作を確認してみましょう。`.env`ファイルに OPENAI の API キーと呼び出し先のモデルを指定します。
+
+```env
+# OpenAI API Key (required)
+OPENAI_API_KEY="sk-..."
+
+# Server Configuration
+PORT=8082
+
+OPENAI_MODEL=gpt-4.1
+```
+
+プロキシサーバーを起動します。
+
+```bash
+bun run dev
+```
+
+Claude Code の環境変数を設定し、プロキシサーバーを起動します。
+
+```bash
+ANTHROPIC_BASE_URL="http://localhost:8082" ANTHROPIC_AUTH_TOKEN="some-api-key" claude
+```
+
+## ツール呼び出しの失敗
+
+簡単なレスポンスは正常に終了します。しかし、ツールの呼び出しがうまくいきませんでした。
+
+```
+ ※ Tip: Run /install-github-app to tag @claude right from your Github issues and PRs
+
+> こんにちはと表示して
+
+● こんにちは
+  ⎿  API Error: Cannot read properties of undefined (reading 'filter')
+
+```
+
+また、TODO を指定したタスク実行についても指示してみたところ、同じようなエラーが発生しました。
+
+```
+> あなたは、以下のタスクを渡されました。
+
+typescript と vite, taiwind css、簡単な react を利用して、スタックとキューでそれぞれ DFS と BFS を行う様子を可視化させるようなプログラムを作成してください。
+いきなり手を動かすのではなく、まずしっかりと検討を行ってください。
+すべての情報を収集し終わった後、変更内容を決定する抽象レポートを作成し、それを元に細部のコーディングを含んだ具体レポートの作成について開始して
+ください。それを元に、実装を開始してください。 タスクはすべてまとめて行ってください。実装段階ではしっかり type:
+"tool_use"機能を利用して提供されているツール群を利用しファイル書き込みや関連コマンド実行まで行ってください。
+私はすべてを承認するので、私の許可をとらず、最後まで実装を終えるようにしてください。
+コーディングにおいてエラーが出た場合もまずできるだけ情報を集めるようにしてほしい。依存ライブラリのバージョン情報なども重要である。
+コードを含んだ具体レポートが完成した場合、実際にコードを反映するようにしてください。
+なお、実装が終わったあと、npm run
+dev で開発サーバを実行しないようにしてください。ユーザが実行するので実行しないでください。代わりに、チャットを一旦終了させてください。
+
+これに対する TODO が以下のとおりです。
+この TODO リストを進めてください。
+
+● Update Todos
+⎿  ☐ Gather requirements and design abstract report
+☐ Write abstract report summarizing architecture and changes
+☐ Write detailed implementation plan report
+☐ Initialize Vite+React+TypeScript project
+☐ Install and configure Tailwind CSS
+☐ Implement graph data structure and BFS/DFS logic
+☐ Implement visualization components (stack, queue, graph nodes/edges)
+☐ Implement control UI for algorithm execution
+☐ Integrate components and test manually
+☐ Run lint and typecheck
+
+● Update Todos
+⎿  ☐ Gather requirements and design abstract report
+☐ Write abstract report summarizing architecture and changes
+☐ Write detailed implementation plan report
+☐ Initialize Vite+React+TypeScript project
+☐ Install and configure Tailwind CSS
+☐ Implement graph data structure and BFS/DFS logic
+☐ Implement visualization components (stack, queue, graph nodes/edges)
+☐ Implement control UI for algorithm execution
+☐ Integrate components and test manually
+☐ Run lint and typecheck
+⎿  API Error: Cannot read properties of undefined (reading 'filter')
+
+```
+
+該当するログを確認してみると、以下のようなエラーが発生していました。
+
+```
+
+🔥 [Stream Error] 2 | import { castToError } from "../internal/errors.mjs";
+3 | export class OpenAIError extends Error {
+4 | }
+5 | export class APIError extends OpenAIError {
+6 | constructor(status, error, message, headers) {
+7 | super(`${APIError.makeMessage(status, error, message)}`);
+^
+error: 400 No tool output found for function call call_jioUVasTKkS7yXP7oYJwJx04.
+status: 400,
+headers: Headers {
+"date": "Tue, 08 Jul 2025 08:28:07 GMT",
+"content-type": "application/json",
+"content-length": "184",
+"connection": "keep-alive",
+"strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+"x-content-type-options": "nosniff",
+"set-cookie": [ "__cf_bm=2Ki6iPDkL0q0amPnlSilVDXh8gh2lcOK2hfr7TMJ29k-1751963287-1.0.1.1-wJvsl3m_feOsMq5KdGfb9xiQqMQoVqxjdVU5xNne4WrDxqhjdC1snBPyOQ8kG8YhGTgNvAusTq9kJ7CNqeaoI9VCrIBQF2uMyDUWSxaRbLA; path=/; expires=Tue, 08-Jul-25 08:58:07 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+"_cfuvid=7LCsYQdRruP2cwLoIGDO4Ow1bBd8bWC8xG7IJvSDQJc-1751963287191-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None"
+],
+"openai-version": "2020-10-01",
+"openai-organization": "mahipal-singh-2bobxm",
+"x-request-id": "req_86360655b58ca750eba544b9c3df5188",
+"openai-processing-ms": "105",
+"cf-cache-status": "DYNAMIC",
+"server": "cloudflare",
+"cf-ray": "95be34cf1fb95eb4-NRT",
+"alt-svc": "h3=\":443\"; ma=86400",
+},
+requestID: "req_86360655b58ca750eba544b9c3df5188",
+error: {
+message: "No tool output found for function call call_jioUVasTKkS7yXP7oYJwJx04.",
+type: "invalid_request_error",
+param: "input",
+code: null,
+},
+code: null,
+param: "input",
+type: "invalid_request_error",
+
+      at new OpenAIError (unknown:1:28)
+      at new APIError ([省略]/cloud-code-proxy-with-search/node_modules/openai/core/error.mjs:7:9)
+      at new BadRequestError (unknown:1:28)
+      at generate ([省略]/cloud-code-proxy-with-search/node_modules/openai/core/error.mjs:53:24)
+      at makeRequest ([省略]/cloud-code-proxy-with-search/node_modules/openai/client.mjs:427:29)
+```
 
 # その他気がついたこと
 
@@ -97,3 +236,7 @@ https://zenn.dev/yoshiko/articles/claude-code-with-o3
 Anthropic SSE や OpenAI に詳しい各位、もしよろしければ、この記事を読んでいただき、アドバイスをいただけると幸いです。
 
 ここまで読んでいただきありがとうございました。
+
+```
+
+```
