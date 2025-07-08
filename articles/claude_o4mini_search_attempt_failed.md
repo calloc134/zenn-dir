@@ -82,6 +82,8 @@ Claude Code の通信を中継するにあたって、Claude Code 側のスト�
 Claude Code 側のストリーミングに関するドキュメントは以下のとおりです。
 https://docs.anthropic.com/en/docs/build-with-claude/streaming
 
+https://docs.anthropic.com/en/docs/build-with-claude/streaming#event-types
+
 簡単にまとめていきます。
 
 #### message_start
