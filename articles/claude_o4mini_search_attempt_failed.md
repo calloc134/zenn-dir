@@ -3,7 +3,7 @@ title: "Claude Codeの中身をo4-mini & 検索機能にしてみたかった (�
 emoji: "🤖"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["AI", "ClaudeCode", "o4-mini", "ChatGPT"]
-published: false
+published: true
 ---
 
 # はじめに
