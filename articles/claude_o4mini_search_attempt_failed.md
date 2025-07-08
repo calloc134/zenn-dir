@@ -145,6 +145,10 @@ ID やモデル名など、レスポンス全体のメタ情報を含むよう�
 
 https://platform.openai.com/docs/api-reference/responses-streaming/response/created
 
+#### response.in_progress
+
+ストリーミングが進行中であることを通知するイベントです。ping のような役割を果たします。
+
 #### response.output_item.added
 
 新しい「アイテム」が生成されたことを通知するイベントです。
@@ -172,6 +176,18 @@ https://platform.openai.com/docs/api-reference/responses-streaming/response/cont
 該当するパートの生成がすべて完了したことを通知するイベントです。
 
 https://platform.openai.com/docs/api-reference/responses-streaming/response/content_part/done
+
+#### response.function_call_arguments.delta
+
+関数呼び出しの引数にあたる JSON の断片を逐次送信するためのイベントです。`delta`に、生成された JSON の一部が含まれます。
+
+https://platform.openai.com/docs/api-reference/realtime-server-events/response/function_call_arguments/delta
+
+#### response.function_call_arguments.done
+
+関数呼び出しのための引数にあたる、最終的な JSON 全体の成果物を通知するイベントです。
+
+https://platform.openai.com/docs/api-reference/realtime-server-events/response/function_call_arguments/done
 
 #### response.output_text.delta
 
