@@ -7,7 +7,19 @@ export default defineConfig({
     port: 3000
   },
   build: {
-    emptyOutDir: false
+    emptyOutDir: false,
+    target: 'node18',
+    lib: {
+      entry: 'src/index.ts',
+      name: 'main',
+      formats: ['cjs']
+    },
+    rollupOptions: {
+      external: ['postgres', 'redis', 'jsonwebtoken', 'jose', 'bcrypt-ts', 'crypto-js'],
+      output: {
+        entryFileNames: 'index.js'
+      }
+    }
   },
   resolve: {
     alias: {

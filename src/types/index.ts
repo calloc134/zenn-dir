@@ -143,6 +143,7 @@ export interface AuthorizationCodeCache {
   pkce_method: string;
   redirect_uri: string;
   scope: string;
+  user_id?: string;
 }
 
 // Request/Response types

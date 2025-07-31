@@ -5,10 +5,10 @@ import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
 
 // Import route handlers
-import { adminRoutes } from './routes/admin';
-import { authRoutes } from './routes/auth';
-import { oauthRoutes } from './routes/oauth';
-import { wellKnownRoutes } from './routes/well-known';
+import { adminRoutes } from './routes/admin.js';
+import { authRoutes } from './routes/auth.js';
+import { oauthRoutes } from './routes/oauth.js';
+import { wellKnownRoutes } from './routes/well-known.js';
 
 const app = new Hono();
 

@@ -3,6 +3,7 @@ import { getCookie } from 'hono/cookie';
 import { getDb } from '@/lib/db';
 import { jwtService } from '@/lib/jwt';
 import { CryptoService } from '@/lib/crypto';
+import { ClientAuthService } from '@/lib/client-auth';
 import { getCache, setCache, deleteCache } from '@/lib/redis';
 import type { 
   PARCache, 
@@ -20,10 +21,11 @@ const app = new Hono();
 // PAR (Pushed Authorization Requests) endpoint
 app.post('/par', async (c) => {
   try {
-    // TODO: Implement private_key_jwt client authentication
     const body = await c.req.parseBody();
     const {
       client_id,
+      client_assertion,
+      client_assertion_type,
       response_type,
       redirect_uri,
       scope,
@@ -32,8 +34,23 @@ app.post('/par', async (c) => {
       code_challenge_method
     } = body;
 
+    // Client authentication
+    if (!client_id || !client_assertion || !client_assertion_type) {
+      return c.json({ error: 'invalid_client', error_description: 'Client authentication required' }, 401);
+    }
+
+    const client = await ClientAuthService.verifyPrivateKeyJWT(
+      client_assertion as string,
+      client_assertion_type as string,
+      client_id as string
+    );
+
+    if (!client) {
+      return c.json({ error: 'invalid_client' }, 401);
+    }
+
     // Basic validation
-    if (!client_id || !response_type || !redirect_uri || !scope || !state || !code_challenge || !code_challenge_method) {
+    if (!response_type || !redirect_uri || !scope || !state || !code_challenge || !code_challenge_method) {
       return c.json({ error: 'invalid_request', error_description: 'Missing required parameters' }, 400);
     }
 
@@ -46,15 +63,6 @@ app.post('/par', async (c) => {
     }
 
     const db = getDb();
-
-    // Validate client
-    const client = await db`
-      SELECT * FROM oauth_clients WHERE client_id = ${client_id as string}
-    `.then(rows => rows[0] as OAuthClient | undefined);
-
-    if (!client) {
-      return c.json({ error: 'invalid_client' }, 400);
-    }
 
     // Validate redirect URI
     const validRedirectUri = await db`
@@ -216,21 +224,21 @@ app.get('/authorize/complete', async (c) => {
       return c.redirect(`/login?session_id=${session_id}`);
     }
 
-    // We need to get the actual user ID from the authorization flow
-    // For now, this is simplified - in a real implementation, we'd store the user ID in the auth code
-    // const userPayload = jwtService.verifySessionToken(userToken);
+    // Get the actual user ID from the authorization flow
+    const userPayload = jwtService.verifySessionToken(userToken);
 
     // Generate authorization code
     const authCode = CryptoService.generateAuthorizationCode();
     const authCodeHash = await CryptoService.hashToken(authCode);
 
-    // Store authorization code
-    const authCodeData: AuthorizationCodeCache = {
+    // Store authorization code with user information
+    const authCodeData: AuthorizationCodeCache & { user_id: string } = {
       client_id: parData.client_id,
       pkce_challenge: parData.code_challenge,
       pkce_method: parData.code_challenge_method,
       redirect_uri: parData.redirect_uri,
-      scope: parData.scope
+      scope: parData.scope,
+      user_id: userPayload.sub
     };
 
     await setCache(`auth_code:${authCodeHash}`, authCodeData, 60); // 1 minute TTL
@@ -255,22 +263,31 @@ app.get('/authorize/complete', async (c) => {
 // Token endpoint
 app.post('/token', async (c) => {
   try {
-    // TODO: Implement private_key_jwt client authentication
     const body = await c.req.parseBody();
-    const { grant_type, client_id } = body;
+    const { grant_type } = body;
 
-    if (!grant_type || !client_id) {
+    if (!grant_type) {
       return c.json({ error: 'invalid_request' }, 400);
     }
 
-    const db = getDb();
-    const client = await db`
-      SELECT * FROM oauth_clients WHERE client_id = ${client_id as string}
-    `.then(rows => rows[0] as OAuthClient | undefined);
+    // Client authentication
+    const { clientId, clientAssertion, clientAssertionType } = ClientAuthService.extractClientAuthentication(body);
+    
+    if (!clientId || !clientAssertion || !clientAssertionType) {
+      return c.json({ error: 'invalid_client', error_description: 'Client authentication required' }, 401);
+    }
+
+    const client = await ClientAuthService.verifyPrivateKeyJWT(
+      clientAssertion,
+      clientAssertionType,
+      clientId
+    );
 
     if (!client) {
-      return c.json({ error: 'invalid_client' }, 400);
+      return c.json({ error: 'invalid_client' }, 401);
     }
+
+    const db = getDb();
 
     if (grant_type === 'authorization_code') {
       return handleAuthorizationCodeGrant(c, body, client, db);
@@ -296,7 +313,7 @@ async function handleAuthorizationCodeGrant(c: any, body: any, client: OAuthClie
   const codeHash = await CryptoService.hashToken(code);
   const authCodeData: AuthorizationCodeCache | null = await getCache(`auth_code:${codeHash}`);
   
-  if (!authCodeData) {
+  if (!authCodeData || !authCodeData.user_id) {
     return c.json({ error: 'invalid_grant' }, 400);
   }
 
@@ -316,9 +333,14 @@ async function handleAuthorizationCodeGrant(c: any, body: any, client: OAuthClie
     return c.json({ error: 'invalid_grant' }, 400);
   }
 
-  // TODO: Get user from the authorization flow
-  // For now, we'll need to store user_id in the auth code data
-  // This is a simplified implementation
+  // Get user information
+  const user = await db`
+    SELECT * FROM users WHERE user_id = ${authCodeData.user_id}
+  `.then((rows: any[]) => rows[0] as User | undefined);
+
+  if (!user) {
+    return c.json({ error: 'invalid_grant' }, 400);
+  }
   
   const scopes = authCodeData.scope.split(' ');
   const hasOpenId = scopes.includes('openid');
@@ -327,7 +349,7 @@ async function handleAuthorizationCodeGrant(c: any, body: any, client: OAuthClie
   // Generate tokens
   const jti = CryptoService.generateToken();
   const accessToken = await jwtService.createAccessToken({
-    sub: 'user_id', // TODO: Get actual user ID
+    sub: user.user_id,
     aud: client.client_id,
     jti,
     scope: authCodeData.scope
@@ -342,10 +364,10 @@ async function handleAuthorizationCodeGrant(c: any, body: any, client: OAuthClie
 
   if (hasOpenId) {
     const idToken = await jwtService.createIDToken({
-      sub: 'user_id', // TODO: Get actual user data
+      sub: user.user_id,
       aud: client.client_id,
-      name: 'User Name',
-      email: 'user@example.com'
+      name: user.display_name,
+      email: user.email
     });
     response.id_token = idToken;
   }
@@ -357,10 +379,29 @@ async function handleAuthorizationCodeGrant(c: any, body: any, client: OAuthClie
     
     // Store refresh token in database
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-    await db`
-      INSERT INTO refresh_tokens (client_id, user_id, refresh_token_hash, expires_at)
-      VALUES (${client.client_id}, ${'user_id'}, ${refreshTokenHash}, ${expiresAt})
-    `;
+    await db.begin(async (tx: any) => {
+      const [refreshToken] = await tx`
+        INSERT INTO refresh_tokens (client_id, user_id, refresh_token_hash, expires_at)
+        VALUES (${client.client_id}, ${user.user_id}, ${refreshTokenHash}, ${expiresAt})
+        RETURNING refresh_token_id
+      `;
+      
+      if (!refreshToken) {
+        throw new Error('Failed to create refresh token');
+      }
+      
+      // Store refresh token scopes
+      const scopeIds = await tx`
+        SELECT scope_id FROM oauth_scopes WHERE scope_name = ANY(${scopes})
+      `;
+      
+      for (const scope of scopeIds) {
+        await tx`
+          INSERT INTO refresh_token_scopes (refresh_token_id, scope_id)
+          VALUES (${refreshToken.refresh_token_id}, ${scope.scope_id})
+        `;
+      }
+    });
     
     response.refresh_token = refreshTokenValue;
   }

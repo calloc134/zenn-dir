@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
+    "allowImportingTsExtensions": false,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "allowJs": true,
@@ -15,7 +15,7 @@
     "sourceMap": true,
     "outDir": "./dist",
     "removeComments": false,
-    "noEmit": true,
+    "noEmit": false,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -26,7 +26,6 @@
     "noImplicitOverride": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
@@ -39,8 +38,7 @@
   },
   "include": [
     "src/**/*",
-    "scripts/**/*",
-    "vite.config.ts"
+    "scripts/**/*"
   ],
   "exclude": [
     "node_modules",
