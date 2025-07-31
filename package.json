@@ -1,16 +1,54 @@
 {
   "name": "zenn-dir",
   "version": "1.0.0",
-  "description": "",
+  "description": "OAuth 2.0/OIDC Authorization Server with Zenn content",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js"
   },
-  "keywords": [],
+  "keywords": [
+    "oauth",
+    "oidc",
+    "authorization-server",
+    "honox"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hono/node-server": "^1.12.2",
+    "bcrypt-ts": "^5.0.2",
+    "crypto-js": "^4.2.0",
+    "hono": "^4.6.2",
+    "honox": "^0.1.24",
+    "jose": "^5.8.0",
+    "jsonwebtoken": "^9.0.2",
+    "postgres": "^3.4.4",
+    "redis": "^4.7.0",
+    "tailwindcss": "^3.4.10",
+    "uuid": "^10.0.0",
     "zenn-cli": "^0.2.1"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.5.4",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.5.0",
+    "@typescript-eslint/parser": "^8.5.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.9.1",
+    "postcss": "^8.4.45",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.3",
+    "vitest": "^2.0.5"
   },
   "packageManager": "pnpm@8.15.6+sha1.8105075ad0aa306138be128c017e9c41e28ecffa"
 }
