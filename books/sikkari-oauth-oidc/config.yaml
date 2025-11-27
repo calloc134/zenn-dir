@@ -1,0 +1,8 @@
+title: "「なんとなく」を卒業！最初からしっかり理解するOAuth/OIDC入門"
+summary: "OAuthとOIDCの基礎から実践までを丁寧に解説。セキュリティの基本概念、認可フロー、トークンの仕組み、実装例など。"
+topics: ["OAuth", "OIDC", "認証", "認可", "JWT"]
+published: false
+price: 0 # 有料の場合200〜5000
+# 本に含めるチャプターを順番に並べましょう
+chapters:
+  - example1
