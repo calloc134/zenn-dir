@@ -6,7 +6,8 @@ title: "ここまでの詳細フロー解説（Confidential Client）"
 
 ここまでの知識を踏まえて、詳細なコードフロー解説を行います。
 
-この章では**防御機構（PKCE、state）は抜き**のフローを解説します。これらは次の章以降で追加していきます。
+この章では**防御機構（PKCE、state）は抜き**のフローを解説します。
+これらは次の章以降で追加していきます。
 
 ここでは **Confidential Client** を前提とします。
 
@@ -29,7 +30,7 @@ sequenceDiagram
     Note left of AS: code=xxx
     RO->>C: 認可コードを渡す
     C->>AS: トークンリクエスト
-    Note right of C: grant_type=authorization_code<br>code=xxx<br>redirect_uri=xxx<br>+ クライアント認証
+    Note right of C: grant_type=authorization_code<br>code=xxx<br>redirect_uri=xxx<br>+ クライアント認証 (ヘッダ)
     AS->>AS: クライアント認証
     AS->>AS: 認可コードを検証
     AS->>AS: アクセストークンを発行
@@ -117,9 +118,16 @@ grant_type=authorization_code
 | -------------- | ---------------------------------------------- |
 | `grant_type`   | `authorization_code`（認可コードフローを示す） |
 | `code`         | 認可コード                                     |
-| `redirect_uri` | 認可リクエスト時と同じ値                       |
+| `redirect_uri` | 認可リクエスト時と同じ値 （オプション）        |
 
 また、`Authorization` ヘッダには `client_secret_basic` 方式でクライアント認証情報を含めます。
+
+:::message
+
+トークンリクエストにおける `redirect_uri` パラメータは、
+OAuth 2.0 の仕様では必須となっていますが、より近年の仕様である OAuth 2.1 では削除されており、省略の対象となっています。
+
+:::
 
 ### 3-2. 認可サーバがクライアント認証
 
@@ -165,6 +173,6 @@ Content-Type: application/json
 
 ## まとめ
 
-ここまでの内容を踏まえ、詳細なコードフローを理解できました。
+ここまでの内容を踏まえ、リクエストボディやレスポンスも含めた詳細なコードフローを理解できました。
 
 次の章からは、このフローに対する攻撃とその防御について解説していきます。
