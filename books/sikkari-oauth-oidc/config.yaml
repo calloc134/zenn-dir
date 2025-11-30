@@ -6,3 +6,22 @@ price: 0 # 有料の場合200〜5000
 # 本に含めるチャプターを順番に並べましょう
 chapters:
   - 01-intro
+  - 02-oauth-oidc-overview
+  - 03-oauth-concepts
+  - 04-oauth-actors
+  - 05-auth-code-flow-simple
+  - 06-access-token-format
+  - 07-client-registration
+  - 08-detailed-flow-confidential
+  - 09-oauth-attacks-overview
+  - 10-auth-code-theft-attack
+  - 11-token-theft-attack
+  - 12-csrf-attack
+  - 13-complete-flow-confidential
+  - 14-refresh-token
+  - 15-client-types
+  - 16-public-client-code-theft
+  - 17-public-client-token-theft
+  - 18-complete-flow-public
+  - 19-implicit-flow
+  - 20-oauth-summary
