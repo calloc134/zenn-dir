@@ -5,15 +5,4 @@ published: false
 price: 0 # 有料の場合200〜5000
 # 本に含めるチャプターを順番に並べましょう
 chapters:
-  - 01-oauth-oidc-intro
-  - 02-oauth-concepts
-  - 03-oauth-players
-  - 04-oauth-basic-flow
-  - 05-access-token-format
-  - 06-client-registration
-  - 07-detailed-flow
-  - 08-csrf-state
-  - 09-redirect-attack
-  - 10-code-injection-pkce
-  - 11-refresh-token
-  - 12-complete-flow
+  -
