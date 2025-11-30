@@ -6,17 +6,3 @@ price: 0 # 有料の場合200〜5000
 # 本に含めるチャプターを順番に並べましょう
 chapters:
   - 01-intro
-  - 02-overview
-  - 03-oauth-concepts
-  - 04-oauth-roles
-  - 05-code-flow-basic
-  - 06-access-token-format
-  - 07-client-registration
-  - 08-detailed-flow
-  - 09-attacks-overview
-  - 10-code-theft-attacks
-  - 11-code-injection-attacks
-  - 12-csrf-attacks
-  - 13-complete-flow
-  - 14-refresh-token
-  - 15-client-types
