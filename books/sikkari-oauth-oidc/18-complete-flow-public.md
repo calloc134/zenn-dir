@@ -1,5 +1,5 @@
 ---
-title: "ここまでの完全版コードフロー解説（Public Client）"
+title: "ここまでの完全版コードフロー解説（Public Clientでの差分）"
 ---
 
 ## 概要
@@ -8,7 +8,8 @@ title: "ここまでの完全版コードフロー解説（Public Client）"
 
 ## Confidential Client との差分
 
-Public Client と Confidential Client の完全版フローの差分は、実は**クライアント認証の有無のみ**です。
+Public Client と Confidential Client の完全版フローの差分は、
+実は**クライアント認証の有無のみ**です。
 
 | 項目                      | Confidential Client | Public Client |
 | ------------------------- | ------------------- | ------------- |
@@ -135,9 +136,8 @@ Content-Type: application/json
 Public Client の完全版コードフローを理解しました。
 
 - Confidential Client との差分は**クライアント認証の有無のみ**
-- トークンリクエスト時の `Authorization` ヘッダの省略
-- トークンリクエスト時の `client_id` パラメータの追加
-- PKCE がクライアント認証の代わりとして機能
+  - トークンリクエスト時の `Authorization` ヘッダの削除
+  - トークンリクエスト時の `client_id` パラメータの追加
 
 | セキュリティ機構      | Confidential Client | Public Client |
 | --------------------- | ------------------- | ------------- |
