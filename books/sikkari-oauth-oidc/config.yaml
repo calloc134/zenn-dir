@@ -1,7 +1,7 @@
-title: "「なんとなく」を卒業！最初からしっかり理解するOAuth/OIDC入門"
-summary: "OAuthとOIDCの基礎から実践までを丁寧に解説。セキュリティの基本概念、認可フロー、トークンの仕組み、実装例など。"
+title: "Kawaiiパワーで完全に理解！しっかりやり切るOAuthとOIDC入門 (執筆中)"
+summary: "OAuthとOIDCの基礎から実践までを丁寧に解説。セキュリティの基本概念、認可フロー、トークンの仕組み、実装例など。Kawaiiイラスト満載で楽しく学びましょう！現在OAuthまで執筆。"
 topics: ["OAuth", "OIDC", "認証", "認可", "JWT"]
-published: false
+published: true
 price: 0 # 有料の場合200〜5000
 # 本に含めるチャプターを順番に並べましょう
 chapters:
