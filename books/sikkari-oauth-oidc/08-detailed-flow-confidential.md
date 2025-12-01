@@ -116,7 +116,7 @@ Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code
 &code=SplxlOBeZQQYbYS6WxSbIA
-&redirect_uri=https://client.example.com/callback
+&redirect_uri=https://client.example.com/callback // オプション
 ```
 
 | パラメータ     | 説明                                           |

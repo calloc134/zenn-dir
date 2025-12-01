@@ -86,7 +86,7 @@ Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code
 &code=SplxlOBeZQQYbYS6WxSbIA
-&redirect_uri=https://client.example.com/callback
+&redirect_uri=https://client.example.com/callback // オプション
 &code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
 ```
 
@@ -99,7 +99,7 @@ Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code
 &code=SplxlOBeZQQYbYS6WxSbIA
-&redirect_uri=https://client.example.com/callback
+&redirect_uri=https://client.example.com/callback // オプション
 &client_id=s6BhdRkqt3
 &code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
 ```
