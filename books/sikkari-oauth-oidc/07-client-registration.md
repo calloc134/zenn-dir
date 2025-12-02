@@ -13,6 +13,8 @@ title: "クライアント登録と認証"
 **リクエスト元が正当なクライアントであるかを認可サーバが確認する**処理を行います。
 この処理を **クライアント認証** と呼びます。
 
+![](/images/07-client-registration/2025-12-02-15-12-52.png)
+
 OAuth には、クライアント認証、およびクライアント登録の仕組みが用意されています。その仕組みについて解説します。
 
 この章の解説は、 **Confidential Client** を前提とします。
@@ -25,6 +27,8 @@ OAuth には、クライアント認証、およびクライアント登録の�
 2. **公開鍵暗号方式**: 公開鍵・秘密鍵を使った認証
 
 公開鍵暗号方式については応用編として後述します。ここでは共有シークレット方式を説明します。
+
+![](/images/07-client-registration/2025-12-02-15-16-56.png)
 
 ## クライアント登録の流れ
 
@@ -54,6 +58,8 @@ RFC 7591 / RFC 7592 では、OAuth 2.0 Dynamic Client Registration という仕�
 | **client_secret** | クライアント認証のための秘密情報      |
 
 `client_id` は公開情報ですが、`client_secret` は秘密情報として厳重に管理する必要があります。
+
+![](/images/07-client-registration/2025-12-02-15-23-57.png)
 
 ## クライアント認証の流れ
 
@@ -88,6 +94,8 @@ Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code&code=xxxxx
 ```
+
+![](/images/07-client-registration/2025-12-02-15-31-54.png)
 
 OAuth 2.0 の仕様である RFC 6749 では、この方式のサポートが必須とされています。
 
@@ -134,3 +142,5 @@ grant_type=authorization_code&code=xxxxx&client_id=xxxxx&client_secret=xxxxx
 Public Client では、`client_secret` を安全に保管できないため、クライアント認証を行いません。
 
 Public Client の場合のセキュリティ対策については、後の章で解説します。
+
+![](/images/07-client-registration/2025-12-02-15-34-59.png)
