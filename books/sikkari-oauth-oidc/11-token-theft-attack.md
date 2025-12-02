@@ -62,6 +62,8 @@ sequenceDiagram
 
 ![](/images/11-token-theft-attack/2025-12-02-16-10-25.png)
 
+![](/images/11-token-theft-attack/2025-12-02-19-13-39.png)
+
 [RFC 7636](https://www.rfc-editor.org/rfc/rfc7636) で定義された仕組みです。
 検証する主体は **認可サーバ** であることに留意してください。
 
@@ -73,7 +75,8 @@ sequenceDiagram
 
    - クライアントが `code_verifier`（ランダム文字列）を生成し、セッションに保存
    - `code_verifier` をハッシュ化して `code_challenge` を生成
-   - 認可リクエスト時に `code_challenge` を認可サーバに渡す
+   - リソースオーナーにフロー開始の指示をする際、`code_challenge` を付与
+   - リソースオーナーは認可リクエスト時に `code_challenge` を認可サーバに渡す
 
 2. **認可コード発行時**
 
