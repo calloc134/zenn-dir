@@ -54,6 +54,8 @@ sequenceDiagram
 
 このようにして、攻撃者は被害者の認可コードを奪取できます。
 
+![](/images/10-auth-code-theft-attack/2025-12-02-15-49-37.png)
+
 ### 攻撃の対策：redirect_uri 完全一致検証
 
 この攻撃を防ぐためには、**認可サーバがリダイレクト URI を厳密に検証する**必要があります。
@@ -80,6 +82,8 @@ sequenceDiagram
 
 解釈の余地のある部分を排除することで、悪用を防止します。
 :::
+
+![](/images/10-auth-code-theft-attack/2025-12-02-15-53-32.png)
 
 ### 対策後のフロー
 
