@@ -46,6 +46,8 @@ eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwic2NvcGUiOiJyZWF
 このトークンをデコードすると、発行者、有効期限、スコープなどの情報を取得できます。
 また、電子署名を持つため、改ざん検知が可能です。
 
+![](/images/06-access-token-format/2025-12-02-13-01-02.png)
+
 ## それぞれのメリットとデメリット
 
 ### Handle 式トークンのメリット・デメリット
@@ -64,6 +66,8 @@ eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwic2NvcGUiOiJyZWF
 Handle 式トークンの場合、認可サーバのデータベースで情報を一元管理しているため、サーバ側のデータ変更は即時に反映されます。
 その一方で、毎回認可サーバに問い合わせる必要があるため、パフォーマンスに影響が出る可能性があります。
 Web の用語を借りると、**ステートフル** なトークン形式と言えます。
+
+![](/images/06-access-token-format/2025-12-02-13-12-10.png)
 
 :::message
 Handle 式トークンを採用する場合、認可サーバに問い合わせるための API が必要です。
@@ -88,6 +92,8 @@ Assertion 式トークンは、トークン自体に情報が含まれている�
 そのため、パフォーマンスに優れています。
 しかし、トークンの無効化が難しいため、アクセストークンの有効期限を短く設定することが一般的です。
 Web の用語を借りると、**ステートレス** なトークン形式と言えます。
+
+![](/images/06-access-token-format/2025-12-02-13-25-27.png)
 
 ## まとめ
 
