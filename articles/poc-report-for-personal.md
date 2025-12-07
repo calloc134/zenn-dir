@@ -23,6 +23,15 @@ published: true
 最後に、当記事が万が一攻撃を助長する場合、
 記事を非公開にいたします。
 
+# TODO
+
+- プロトタイプについての更に正確な解説
+- `$@`構文周りのコードリーディングと裏取り
+- Server Functions 周りの正確な表現
+- 本家 React コードからの引用の追加
+- チャンクの処理の流れのコードリーディング裏取りと解説
+- 結局何が問題だったのか、の解説
+
 # 攻撃の概要
 
 今回の PoC では、二回のプロトタイプトラバーサルが存在する。
@@ -931,7 +940,7 @@ msanft 氏による PoC の解説リポジトリ
 https://github.com/msanft/CVE-2025-55182/
 
 Guillermo Rauch 氏による脆弱性報告ツイート
-https://x.com/rauchg/status/1997362942929440937
+https://x.com/rauchg/article/1997362942929440937
 
 Lachlan Davidson 氏による報告時の PoC リポジトリ
 https://github.com/lachlan2k/React2Shell-CVE-2025-55182-original-poc
