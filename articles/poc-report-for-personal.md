@@ -1,19 +1,28 @@
 ---
-title: "poc研究レポート"
+title: "結局なぜRCEが発生するのか？react2shell PoC研究レポート"
 emoji: "📑"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: []
+topics: ["react", "react2shell", "javascript", "rsc", "nextjs"]
 published: true
 ---
 
 # はじめに
 
-研究目的。
-本番環境での動的解析を実施していない。
-間違い、認識違いが含まれる可能性あり。
-コードリーディングが間に合っていない部分あり。
-コードによる裏取りは行っているものの、生成 AI によるハルシネーションの可能性あり。
-問題あれば非公開にいたします。
+当記事は、[react2shell](https://react2shell.com/) の PoC 攻撃手法についての調査です。
+
+# 注意事項
+
+当記事の内容は、あくまで PoC 攻撃手法の研究目的です。
+
+また、当記事の内容には間違い・認識違いが含まれる可能性があります。
+本番環境での動的な解析を実施しておらず、コードリーディングを中心とした調査であるためです。
+
+また、コードによる裏取りは行っているものの、
+生成 AI によるハルシネーションの可能性も否定できません。
+
+最後に、当記事が万が一攻撃を助長する場合、
+記事を非公開にいたします。
+
 
 # 攻撃の概要
 
@@ -391,7 +400,19 @@ JavaScript のオブジェクトは、
 ## 第一段階: デシリアライズ一回目とチャンク偽造
 
 RSC サーバは、ユーザのデータを受け取り、デシリアライズ一回目を開始する。
-`decodeReplyFromBusboy`関数から処理の流れを説明する。
+
+Server Functions の受け取りは、Next.js 側コードで行われる。
+
+https://github.com/vercel/next.js/blob/0e973f71f133f4a0b220bbf1e3f0ed8a7c75e00d/packages/next/src/server/app-render/action-handler.ts#L879C1-L883C16
+
+```js
+boundActionArguments = await decodeReplyFromBusboy(busboy, serverModuleMap, {
+  temporaryReferences,
+});
+```
+
+このように、
+`decodeReplyFromBusboy`関数が await で呼び出される。
 この関数は、Node.js の Busboy モジュールを用いて、
 Server Functions (Actions)の引数等を Flight プロトコルで受け取り、デシリアライズを行う関数である。
 
