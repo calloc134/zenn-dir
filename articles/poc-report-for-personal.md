@@ -1,5 +1,5 @@
 ---
-title: "結局なぜRCEが発生するのか？react2shell PoC研究レポート"
+title: "結局なぜRCEが発生するのか？react2shell PoC研究レポート (途中)"
 emoji: "📑"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["react", "react2shell", "javascript", "rsc", "nextjs"]
