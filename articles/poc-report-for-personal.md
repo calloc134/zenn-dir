@@ -23,7 +23,6 @@ published: true
 最後に、当記事が万が一攻撃を助長する場合、
 記事を非公開にいたします。
 
-
 # 攻撃の概要
 
 今回の PoC では、二回のプロトタイプトラバーサルが存在する。
@@ -920,3 +919,19 @@ function initializeModelChunk<T>(chunk: ResolvedModelChunk<T>): void {
 ```js
 Function("process.mainModule.require(...);0");
 ```
+
+# まとめ
+
+# 参考文献
+
+maple3142 氏による 発端の PoC コード
+https://gist.github.com/maple3142/48bc9393f45e068cf8c90ab865c0f5f3
+
+msanft 氏による PoC の解説リポジトリ
+https://github.com/msanft/CVE-2025-55182/
+
+Guillermo Rauch 氏による脆弱性報告ツイート
+https://x.com/rauchg/status/1997362942929440937
+
+Lachlan Davidson 氏による報告時の PoC リポジトリ
+https://github.com/lachlan2k/React2Shell-CVE-2025-55182-original-poc
