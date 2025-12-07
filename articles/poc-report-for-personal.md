@@ -177,6 +177,9 @@ Blob とは、バイナリデータを表現するためのオブジェクトで
 ## チャンクの処理と initializeModelChunk 関数
 
 `initializeModelChunk`関数は、実際にチャンクをデコードする主要な関数である。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L446C1-L502C1
+
 処理の内容は複雑であるが、注目すべき点を極力絞って解説する。
 
 ```js
@@ -217,6 +220,8 @@ Flight プロトコルの特殊な構文を解釈しながら、
 
 `reviveModel`関数は、Flight プロトコルのデシリアライズを行う関数である。
 
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L386C1-L443C1
+
 通常オブジェクトの場合は再帰的にプロパティを辿りながらデシリアライズを行うが、
 今回は省略する。
 また、配列やオブジェクトの処理も省略する。
@@ -244,6 +249,8 @@ function reviveModel(
 
 ここで`parseModelString`関数が呼び出される。
 この関数は、Flight プロトコルの文字列構文を解釈する、最重要な関数である。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L916C1-L1089C2
 
 今回は、脆弱性に関連のする 2 つと、
 脆弱性には関連しないが PoC に登場する 1 つの構文の、
@@ -320,6 +327,8 @@ Server Functions の 実体となる関数オブジェクトを、
 プロトタイプトラバーサルに利用される脆弱な実装を見ていく。
 
 `getOutlinedModel`関数の実装は以下の通り。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L595C1-L638C2
 
 ```js
 function getOutlinedModel<T>(
@@ -465,6 +474,8 @@ Chunk.prototype.then を引っこ抜いて自分の JSON に埋め込むこと�
 では、具体的なコードを示しながら説明する。
 まず、Flight のデシリアライズ関数に到達するまでの流れを説明する。
 
+https://github.com/facebook/react/blob/dd048c3b2d8b5760dec718fb0926ca0b68660922/packages/react-server-dom-webpack/src/server/ReactFlightDOMServerNode.js#L548C1-L606C2
+
 ```js
 function decodeReplyFromBusboy<T>(
   busboyStream: Busboy,
@@ -511,6 +522,30 @@ function decodeReplyFromBusboy<T>(
 `createResponse`関数で Response オブジェクトを生成する。
 
 ここの処理はあまり関係がなさそうだが、一応説明する。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L1091C1-L1108C2
+
+```js
+export function createResponse(
+  bundlerConfig: ServerManifest,
+  formFieldPrefix: string,
+  temporaryReferences: void | TemporaryReferenceSet,
+  backingFormData?: FormData = new FormData()
+): Response {
+  const chunks: Map<number, SomeChunk<any>> = new Map();
+  const response: Response = {
+    _bundlerConfig: bundlerConfig,
+    _prefix: formFieldPrefix,
+    _formData: backingFormData,
+    _chunks: chunks,
+    _closed: false,
+    _closedReason: null,
+    _temporaryReferences: temporaryReferences,
+  };
+  return response;
+}
+```
+
 Response と言っているが、レスポンスというより、これはただの内部状態を管理するオブジェクトである。
 そして`Response`は、内部に`_chunks` マップを保持している。
 これは、チャンク ID とチャンクオブジェクトの実体を保持する連想配列である。
@@ -520,10 +555,15 @@ Response と言っているが、レスポンスというより、これはた�
 
 最後に`getRoot(response)`関数が呼ばれ、
 ルート、つまり ID が 0 の チャンクオブジェクトを取得する。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L177C1-L180C2
+
 実際には、`getRoot`関数はほぼラッパーであり、
 その内部の`getChunk(response, 0)`関数が実体である。
 
 `getChunk`関数は以下のように実装されている。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L518C1-L540C2
 
 ```js
 function getChunk(response: Response, id: number): SomeChunk<any> {
@@ -548,17 +588,16 @@ function getChunk(response: Response, id: number): SomeChunk<any> {
 ```
 
 初回なので、チャンク ID 0 に対応するチャンクオブジェクトは存在しない。
-したがって、チャンクオブジェクトを作成する。
-`createResolvedModelChunk`関数でチャンクオブジェクトを作成する。
+したがって、`createResolvedModelChunk`関数でチャンクオブジェクトを作成する。
 そして、チャンクオブジェクトを`response._chunks`マップに保存する。
-ここで、`getRoot`に関連する呼び出しは終了し、
+
+以上で、`getRoot`に関連する呼び出しは終了し、
 `decodeReplyFromBusboy`関数も return 文で終了する。
 この関数は チャンクオブジェクト、つまり thenable を返す。
 thenable なので、await 可能である。
 
 通信開始時の`decodeReplyFromBusboy`関数の呼び出しは、
 `return getRoot(response);`で終了するが、
-
 イベントリスナーに登録したコールバックの処理は、
 ストリーム処理に合わせて非同期に進行していく。
 今回の攻撃に関連してくるのは、`file`である。
@@ -593,6 +632,8 @@ busboyStream.on("file", (name, value, { filename, encoding, mimeType }) => {
 この`resolveField` 関数内部で、何度か関数呼び出しを経由し、
 最終的に`initializeModelChunk` 関数が呼ばれる。
 
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L1110C1-L1127C2
+
 ```js
 export function resolveField(
   response: Response,
@@ -613,6 +654,8 @@ export function resolveField(
   }
 }
 ```
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L268C1-L299C2
 
 ```js
 function resolveModelChunk<T>(
@@ -717,8 +760,22 @@ Chunk.prototype.then を取得し、プレーンオブジェクトの then プ�
 
 今回は、プレーンオブジェクトにチャンクの特性を付与してチャンクとして振る舞わせている。
 そのため、`await decodeReplyFromBusboy(...)`部分で、
-チャンクの振る舞いが開始される。
+返ってきたチャンクを await することで、チャンクの振る舞いが開始される。
 より具体的には、`await` により then プロパティが呼び出される。
+
+:::message
+ここの`await`で then を呼んでいるのか、それとも`$@`で呼んでいるのか、コードの裏付けを取れていない。
+少し不安になってきたため信用しないように。
+
+:::
+
+https://github.com/vercel/next.js/blob/0e973f71f133f4a0b220bbf1e3f0ed8a7c75e00d/packages/next/src/server/app-render/action-handler.ts#L879C1-L883C16
+
+```js
+boundActionArguments = await decodeReplyFromBusboy(busboy, serverModuleMap, {
+  temporaryReferences,
+});
+```
 
 then プロパティには 先程 Chunk.prototype.then を設定したため、
 チャンク特有の初期化処理が実行される。
@@ -731,6 +788,8 @@ then プロパティには 先程 Chunk.prototype.then を設定したため、
 
 参考までに、Chunk.prototype.then のコードは以下の通り。
 チャンク初期化処理において、this パラメータは偽造したチャンクオブジェクトである。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L124C1-L165C3
 
 ```js
 Chunk.prototype.then = function <T>(
@@ -785,6 +844,8 @@ Chunk.prototype.then = function <T>(
 こうして、初期化処理として`initializeModelChunk`関数が呼び出される。
 前述したが、該当する実装を再掲する。
 
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L446C1-L502C1
+
 ```js
 function initializeModelChunk(chunk) {
   const rootReference =
@@ -823,6 +884,8 @@ value プロパティには、シリアライズされた Flight プロトコル
 この RCE を発生させられる仕組みを、一般的にガジェットと呼称する。
 
 該当コードを抽出すると、以下のとおりである。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L1059C1-L1068C8
 
 ```js
 case 'B': {
@@ -894,6 +957,8 @@ ID の指定によるプロトタイプトラバーサルが可能である。
 
 `_formData`と`_prefix`を含む`_response`プロパティの与え方を説明する。
 `reviveModel`関数の呼び出し部分は以下のようになっている。
+
+https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L468C1-L474C7
 
 ```js
 function initializeModelChunk<T>(chunk: ResolvedModelChunk<T>): void {
