@@ -341,19 +341,24 @@ JWT の検証に加え、`iss`/`aud` 検証も行います。
 `scope` 検証には未対応の模様です。
 
 次に、OAuth リソースサーバ向けのミドルウェアを紹介します。
-Auth0 が提供するミドルウェア [node-oauth2-jwt-bearer](https://auth0.github.io/node-oauth2-jwt-bearer/) があります。
+Auth0 が提供するミドルウェア [node-oauth2-jwt-bearer](https://github.com/auth0/node-oauth2-jwt-bearer/tree/main/packages/express-oauth2-jwt-bearer) があります。
 `jose` をベースに開発されており、
 JWT の検証に加え、`iss`/`aud` 検証も行います。
 `scope` 検証にも対応しています。
 
 ## Fastify
 
-Fastify では、JWT 検証のミドルウェアのみ存在するようです。
+Fastify でも、単なる JWT 検証ミドルウェアと OAuth リソースサーバ向けミドルウェアの両方が存在します。
 
+まず、単なる JWT 検証ミドルウェアを紹介します。
 サードパーティによるプラグイン [fastify-jwt-jwks](https://github.com/nearform/fastify-jwt-jwks) があります。
 `@fastify/jwt` をベースに開発されており、
 JWT の検証に加え、`iss`/`aud` 検証もサポートしています。
 `scope` 検証には未対応の模様です。
+
+次に、OAuth リソースサーバ向けのミドルウェアを紹介します。
+Auth0 が提供するミドルウェア [auth0-fastify-api](https://github.com/auth0/auth0-fastify/tree/main/packages/auth0-fastify-api) があります。
+`jose` をベースに開発されており、
 
 ## Elysia
 
@@ -431,8 +436,8 @@ OAuth を理解していない状態で実装するのは危険です。
 - そもそも OAuth アクセストークンをセッションのように使うのは避けるべき
 - クライアント・サーバ間のセッション管理には以下を使うべき
   - クッキーベースのセッション
-  - バックエンド発行の JWT セッションを使うべきです。
-- それでももし OAuth アクセストークンをセッションとして使うなら
+  - バックエンド発行の JWT セッションを使うべき
+- それでも、もし OAuth アクセストークンをセッションとして使うなら
   - OAuth に対しての十分な理解を持ち
   - バックエンド API が OAuth リソースサーバとして動作することを踏まえ
   - その上で、提供されるミドルウェアの用法を誤らずに実装すること！
