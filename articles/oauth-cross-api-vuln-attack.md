@@ -359,6 +359,8 @@ JWT の検証に加え、`iss`/`aud` 検証もサポートしています。
 次に、OAuth リソースサーバ向けのミドルウェアを紹介します。
 Auth0 が提供するミドルウェア [auth0-fastify-api](https://github.com/auth0/auth0-fastify/tree/main/packages/auth0-fastify-api) があります。
 `jose` をベースに開発されており、
+JWT の検証に加え、`iss`/`aud` 検証も行います。
+`scope` 検証にも対応しています。
 
 ## Elysia
 
