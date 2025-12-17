@@ -572,7 +572,6 @@ OAuth の仕組みを無理に流用して複雑化させてしまうよりも�
 具体的には、以下のような仕組みが考えられます。
 
 - バックエンドの発行するクッキーを用いたセッション管理
-- バックエンドの発行する JWT を用いたセッション管理
 
 セッションを管理したいのであれば
 OAuth の仕組みを敢えて利用する必要はないと考えます。
@@ -596,14 +595,224 @@ https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/15-client-types
 そしてこの構成は、OAuth の仕様を正しく理解していない状態で実装すると
 脆弱性の温床になりやすいです。
 その代わり、
-**バックエンドで発行するクッキーや JWT を用いたセッション管理**を推奨したいと思います。
+**バックエンドで発行するクッキーを用いたセッション管理**を推奨したいと思います。
+
+# 代わりに好まれる構成
+
+代わりの構成の例を紹介します。
+筆者は、Hono の `hono/cookie`と`hono/jwt` ユーティリティを用いて、
+自前でミドルウェアを実装し、
+クッキーベースで認証を行う構成が好ましいと考えています。
+
+参考となるコードについて提示します。
+
+まずはバックエンド側、Hono のコードです。
+
+```ts
+// Cookie を送受信したいので credentials を true にする（origin は * ではなく明示）
+app.use(
+  "*",
+  cors({
+    origin: FRONT_ORIGIN,
+    credentials: true,
+  })
+);
+
+// Cookie 認証は CSRF 対策が必要になりやすいので、最低限 Origin ベースで保護（任意）
+app.use(
+  "*",
+  csrf({
+    origin: FRONT_ORIGIN,
+  })
+);
+
+const cookieOptions = () => ({
+  httpOnly: true,
+  secure: isProd, // 本番は HTTPS 前提で true 推奨
+  sameSite: "Lax" as const, // 別サイト運用なら 'None' + secure:true が必要
+  path: "/",
+  maxAge: 60 * 60, // 1h（秒）
+});
+
+const requireAuth: Parameters<typeof app.get>[1] = async (c, next) => {
+  const token = getCookie(c, COOKIE_NAME);
+  if (!token) return c.json({ message: "Unauthorized" }, 401);
+
+  try {
+    const payload = (await verify(token, JWT_SECRET)) as AccessTokenPayload;
+    c.set("user", { id: payload.sub });
+    await next();
+  } catch {
+    return c.json({ message: "Unauthorized" }, 401);
+  }
+};
+
+// 認証状態確認（フロントは HttpOnly Cookie を読めないので、この API を叩いて判断する）
+app.get("/auth/me", requireAuth, (c) => {
+  return c.json({ user: c.get("user") });
+});
+```
+
+このコードでは、`requireAuth` ミドルウェアで
+まずクッキーを読み取り、
+クッキーの中に含まれる JWT を検証しています。
+検証が正しければ認証成功とし、ユーザ情報をコンテキストにセットしています。
+
+なお、クッキーを CORS ポリシーに引っかからずに送信するための設定を行い、
+CSRF 対策を最低限実装しています。
+
+次にフロントエンド側、React のコード例です。
+React 自体のコードではなく、API 呼び出し部分のみ抜粋しています。
+
+```ts
+export async function me() {
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    method: "GET",
+    credentials: "include", // ← Cookie を送る
+  });
+
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ user: { id: string } }>;
+}
+```
+
+このコードでは、`fetch` のオプションで `credentials: "include"` を指定し、
+クッキーを送信しています。
+こうすることで、バックエンド側でクッキーを読み取れるようになります。
+
+なお、`fetch`のオプションで`credentials: "include"` を指定する場合、
+クッキーが`HttpOnly`であっても問題なく送信されます。
+このようにすることで、
+クライアント側でクッキーを JavaScript から読めないようにし、
+悪意のある JavaScript からの盗み見を防止できます。
+
+なお、ログイン・ログアウト処理については
+以下のように記述することができます。
+
+バックエンド側コード:
+
+```ts
+// ログイン（JWT を発行して HttpOnly Cookie に保存）
+app.post("/auth/login", async (c) => {
+  const { email, password } = await c.req.json<{
+    email: string;
+    password: string;
+  }>();
+
+  // ログイン処理は省略（適宜実装してください）
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload: AccessTokenPayload = {
+    sub: "user_123",
+    iat: now,
+    exp: now + 60 * 60,
+  };
+
+  const jwt = await sign(payload, JWT_SECRET);
+  setCookie(c, COOKIE_NAME, jwt, cookieOptions());
+
+  return c.json({ ok: true });
+});
+
+// ログアウト（Cookie を削除）
+app.post("/auth/logout", (c) => {
+  deleteCookie(c, COOKIE_NAME, {
+    path: "/",
+    secure: isProd,
+  });
+  return c.json({ ok: true });
+});
+```
+
+ログイン API では、
+ユーザ認証に成功した場合に JWT を発行し、
+`HttpOnly` 属性付きのクッキーに保存しています。
+
+ログアウト API では、
+単にクッキーを削除しています。
+
+フロントエンド側コード:
+
+```ts
+export async function login(email: string, password: string) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include", // ← Cookie を送る
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ ok: true }>;
+}
+export async function logout() {
+  const res = await fetch(`${API_BASE}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+```
+
+フロントエンド側では、ログイン API とログアウト API を呼び出す際に
+`credentials: "include"` を指定してクッキーを送信しています。
+サーバ側でクッキーが操作されるため、これで問題ありません。
+
+:::message
+今回はクッキーの上に JWT を載せる形で実装しましたが、
+クッキーの上にアサーション式トークンを載せるこの実装は
+**ステートレスセッション** と呼称されることが多いです。
+この特性のセッションには以下の特徴があります。
+
+- 外部 DB が必要ないため
+  - インフラ構成がシンプルになる
+  - スケーラビリティが高い
+  - データ変更が難しい（JWT 発行後は不変）
+  - クッキーの失効が難しい（JWT の有効期限まで有効）
+
+この特性上、今回のコードでは
+クッキーを削除するのみにとどまっています。
+
+これに対し、クッキーの上に handle 式トークンを載せる実装は
+**ステートフルセッション** と呼称されることが多いです。
+この特性のセッションには以下の特徴があります。
+
+- 外部 DB が必要になるため
+  - インフラ構成が複雑になる
+  - スケーラビリティが低い
+  - データ変更が容易（DB のデータを書き換えればよい）
+  - クッキーの失効が容易（DB から削除すれば即座に無効化可能）
+
+これらの違いも踏まえた上で、要件に応じて適切な方式を選択してください。
+:::
+
+:::message
+
+バックエンドサーバが JWT を発行する場合、
+対称鍵署名（HMAC）を用いることが多いです。
+具体的には、`HS256` アルゴリズムがよく使われます。
+
+これは、バックエンドサーバが唯一の署名者であり、
+検証者でもあるためです。
+
+では、OAuth の認可サーバの発行する
+アクセストークンの場合はどうでしょうか？
+
+アクセストークンの検証を行うのはリソースサーバであり、
+認可サーバとは別の存在です。
+したがって、非対称鍵署名（RSA や EC）を用いることが一般的です。
+具体的には、`RS256` や `ES256` アルゴリズムがよく使われます。
+
+この違いをしっかり理解しておきましょう。
+
+:::
 
 # 結論
 
 - そもそも OAuth アクセストークンをセッションのように使うのは避けるべき
 - クライアント・サーバ間のセッション管理には以下を使うべき
-  - クッキーベースのセッション
-  - バックエンド発行の JWT セッションを使うべき
+  - バックエンドの発行するクッキーを用いたセッション
 - それでも、もし OAuth アクセストークンをセッションとして使うなら
   - OAuth に対しての十分な理解を持ち
   - バックエンド API が OAuth リソースサーバとして動作することを踏まえ
