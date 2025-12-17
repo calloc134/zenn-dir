@@ -61,11 +61,37 @@ Auth0 を用いてログインを実装しています。
 このように、サービス B の開発者は被害者になりすまして
 サービス A を利用できてしまうのです。
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Victim as 被害者(ブラウザ)
+    participant Auth0 as Auth0(認可サーバ)
+    participant B as サービスB(悪意ある運営者)
+    participant A as サービスA(バックエンドAPI)
+
+    Victim->>B: サービスBにログイン開始
+    B->>Auth0: 認可要求 (client=ServiceB)
+    Auth0-->>Victim : 認可応答 (アクセストークン発行)
+
+    note over B: 運営者なので被害者のアクセストークンを取得できる<br/>(例: Bのバックエンド/ログ/保存処理)
+    Victim-->>B: 取得したアクセストークンを送信
+
+    B->>A: 取得したアクセストークンでAのAPIを呼び出す
+
+    A->>A: 脆弱な検証を行う
+    A-->>B: アクセス成功
+    note over B,A: サービスB運営者が被害者になりすまして<br/>サービスAを利用できてしまう
+
+```
+
 文字で解説されても、分かりづらいですね。
 
 # 今回の攻撃の概念実証を作った
 
 この攻撃の概念実証を作成しました。
+
+![](/images/oauth-cross-api-vuln-attack/2025-12-17-15-58-10.png)
+
 以下の URL から動作を確認できます。
 
 **サービス A**
@@ -73,8 +99,6 @@ https://frontend-client-a.calloc134personal.workers.dev/
 
 **サービス B**
 https://frontend-client-b.calloc134personal.workers.dev/
-
-## 技術構成と設計
 
 今回の概念実証では Auth0 と Hono を利用しています。
 
@@ -102,19 +126,31 @@ https://frontend-client-b.calloc134personal.workers.dev/
 
 1. ユーザがサービス B にログインし
    サービス B のアクセストークンを取得する
+   ![](/images/oauth-cross-api-vuln-attack/2025-12-17-16-01-04.png)
+   _1. サービス B にログイン_
+   ![](/images/oauth-cross-api-vuln-attack/2025-12-17-16-01-35.png)
+   _2. サービス B のアクセストークンを取得_
+
 2. 概念実証サイトでは、
    サービス A のバックエンド API と サービス B のバックエンド API を
    両方呼び出せるようになっている
 3. サービス B の脆弱なバックエンド API・セキュアなバックエンド API を呼び出す
    → もちろんどちらも成功（正規用途の動作確認）
+   ![](/images/oauth-cross-api-vuln-attack/2025-12-17-16-01-55.png)
+   _3. サービス B のセキュアなバックエンド API を呼び出す → 成功_
+
 4. サービス A の脆弱なバックエンド API・セキュアなバックエンド API を呼び出す
    - 脆弱なバックエンド API は成功 → **なりすまし成功**
+     ![](/images/oauth-cross-api-vuln-attack/2025-12-17-16-02-20.png)
+     _4. サービス A の脆弱なバックエンド API を呼び出す → 成功_
    - セキュアなバックエンド API は失敗 → 成りすまし失敗
+     ![](/images/oauth-cross-api-vuln-attack/2025-12-17-16-02-41.png)
+     _5. サービス A のセキュアなバックエンド API を呼び出す → 失敗_
 
 脆弱なバックエンド API 側は検証不備により、アクセストークンが使い回せてしまいます。
 
 もし攻撃者のサービス B が多くのユーザに使われていたら、
-サービス B の管理人はサービス B でアクセストークンを発行したすべてのユーザについて
+サービス B の管理人は**サービス B でアクセストークンを発行したすべてのユーザについて**
 成りすまして サービス A を利用することができてしまいます。
 
 # バックエンド API がアクセストークンを検証する実装
@@ -134,6 +170,8 @@ https://frontend-client-b.calloc134personal.workers.dev/
 3. フロントエンドはバックエンド API にアクセストークンを送信する
 4. バックエンド API はアクセストークンを検証する
 5. **アクセストークンが正しければ** API を実行する
+
+
 
 今回の問題は、
 5 の「アクセストークンが正しければ」という検証に不備があったことに起因します。
