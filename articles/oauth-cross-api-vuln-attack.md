@@ -25,6 +25,21 @@ OAuth/OIDC ベースでログインを実装するサービスが増えていま
 
 などを解説していきたいと思います。
 
+:::message
+当記事では、
+Hono の提供するミドルウェアである
+
+- JWT Auth Middleware
+- JWK Auth Middleware
+
+を、わかりやすさのため、まとめて 「JWT ミドルウェア」と呼称しています。
+
+また、「JWT に対する署名検証」と表現している部分がありますが、
+署名検証のみではなく、有効期限の検証(exp クレーム)などの基本的な検証も含むものと意図していました。
+曖昧さを含んだ表記であるため、こちらは近いうちに修正を検討しています。
+
+:::
+
 # 想定シナリオ
 
 今回の問題は、
@@ -44,22 +59,6 @@ Auth0 を用いてログインを実装しています。
 ここで前提として、**サービス B の開発者は悪意ある者である**という仮定を置きます。
 
 攻撃の流れは以下のようになります。
-
-1. 被害者が、サービス B にログインする
-2. 悪意あるサービス B の開発者は、
-   被害者がサービス B にログインしていることを利用して
-   被害者のアクセストークンを入手する
-   （サービス B の運営者なので、当然被害者のアクセストークンを入手できる）
-3. サービス B の開発者は、
-   被害者のアクセストークンをサービス A のバックエンド API に送信する
-4. サービス A のバックエンドは**誤った検証をしているため**
-   サービス B 向けのアクセストークンを受け入れてしまう
-5. つまり、サービス B の開発者が被害者になりすまして、
-   サービス A のバックエンド API を呼び出せる
-6. **なりすましの完成！**
-
-このように、サービス B の開発者は被害者になりすまして
-サービス A を利用できてしまうのです。
 
 ```mermaid
 sequenceDiagram
@@ -84,7 +83,24 @@ sequenceDiagram
 
 ```
 
+1. 被害者が、サービス B にログインする
+2. 悪意あるサービス B の開発者は、
+   被害者がサービス B にログインしていることを利用して
+   被害者のアクセストークンを入手する
+   （サービス B の運営者なので、当然被害者のアクセストークンを入手できる）
+3. サービス B の開発者は、
+   被害者のアクセストークンをサービス A のバックエンド API に送信する
+4. サービス A のバックエンドは**誤った検証をしているため**
+   サービス B 向けのアクセストークンを受け入れてしまう
+5. つまり、サービス B の開発者が被害者になりすまして、
+   サービス A のバックエンド API を呼び出せる
+6. **なりすましの完成！**
+
+このように、サービス B の開発者は被害者になりすまして
+サービス A を利用できてしまうのです。
+
 文字で解説されても、分かりづらいですね。
+では、実例をおみせしましょう。
 
 # 今回の攻撃の概念実証を作った
 
@@ -165,13 +181,38 @@ https://frontend-client-b.calloc134personal.workers.dev/
 
 全体の流れは以下のようになります。
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor RO as ブラウザ
+    participant C as フロントエンド
+    participant AS as Auth0
+    participant RS as Hono バックエンドAPI
+
+    RO->>C: サービスAを利用開始（ログイン）
+    C->>AS: 認可要求（Authorization Code + PKCE, audience=RS, scope=...）
+    AS-->>RO: ログイン/同意画面
+    RO->>AS: 認証・同意
+    AS-->>C: 認可応答（リダイレクト: authorization code）
+    C->>AS: トークン要求（code + code_verifier）
+    AS-->>C: トークン応答（access_token / ある場合はid_token）
+
+    RO->>C: API操作
+    C->>RS: API呼び出し（Authorization: Bearer access_token）
+    RS->>AS: 署名に利用された公開鍵の取得
+    RS->>RS: アクセストークン検証
+    RS-->>C: 200 OK（保護リソース）
+    C-->>RO: 結果表示
+
+```
+
+この内、簡単にまとめると以下のとおりになります。
+
 1. フロントエンドは Auth0 で OAuth/OIDC ログインを行う
 2. フロントエンドはアクセストークンを取得する
 3. フロントエンドはバックエンド API にアクセストークンを送信する
 4. バックエンド API はアクセストークンを検証する
 5. **アクセストークンが正しければ** API を実行する
-
-
 
 今回の問題は、
 5 の「アクセストークンが正しければ」という検証に不備があったことに起因します。
@@ -187,6 +228,33 @@ OAuth 仕様に照らすと、
 
 - **フロントエンド** = OAuth クライアント（Public Client といえる）
 - **バックエンド API** = OAuth リソースサーバ
+
+先程のフロー図を OAuth の登場人物で表現すると以下のようになります。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor RO as リソースオーナー
+    participant C as クライアント
+    participant AS as 認可サーバ
+    participant RS as リソースサーバ
+
+    RO->>C: サービスAを利用開始（ログイン）
+    C->>AS: 認可要求（Authorization Code + PKCE, audience=RS, scope=...）
+    AS-->>RO: ログイン/同意画面
+    RO->>AS: 認証・同意
+    AS-->>C: 認可応答（リダイレクト: authorization code）
+    C->>AS: トークン要求（code + code_verifier）
+    AS-->>C: トークン応答（access_token / ある場合はid_token）
+
+    RO->>C: API操作
+    C->>RS: API呼び出し（Authorization: Bearer access_token）
+    RS->>AS: 署名に利用された公開鍵の取得
+    RS->>RS: アクセストークン検証
+    RS-->>C: 200 OK（保護リソース）
+    C-->>RO: 結果表示
+
+```
 
 OAuth の登場人物については、以下の記事が参考になります。
 https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/04-oauth-actors
@@ -285,15 +353,28 @@ Hono 利用者が、`aud` パラメータのオプションがないという理
 `aud` パラメータを検証するオプションがないという問題は
 **CVE-2025-62610** として報告されました。
 
-この脆弱性を狙った攻撃の正しい表現は`token mix-up` 攻撃です。
+https://nvd.nist.gov/vuln/detail/CVE-2025-62610
+https://github.com/honojs/hono/security/advisories/GHSA-m732-5p4w-x69g
 
 ## Hono 側の修正
 
 この問題に対応し Hono 側で修正が行われ、
 JWT ミドルウェアに対して `aud` 検証のオプションが追加されました。
 
+https://github.com/honojs/hono/commit/45ba3bf9e3dff8e4bd85d6b47d4b71c8d6c66bef
+
 これにより、バックエンド API を認可する場合でも
 `aud` 検証をミドルウェアで行う設定にすれば安全に利用できるようになりました。
+
+```ts
+jwk({
+  jwks_uri: `https://${auth0Domain}/.well-known/jwks.json`,
+  verification: {
+    aud,
+    iss,
+  },
+});
+```
 
 ## 注意点
 
@@ -330,20 +411,22 @@ OAuth リソースサーバ向けに特化したものではない、
 これは筆者の推測ですが、「JWT ミドルウェア」という名称からしてそのように読み取れます。
 
 本来であれば、利用者は OAuth 認可の用途でアクセストークン検証を行う場合、
-JWT ミドルウェアの利用で署名検証と発行元（issuer）の検証を行うことを前提に、
-
+JWT ミドルウェアの利用で署名検証と発行元（issuer）の検証を行うことを前提にとして
 JWT ミドルウェアでは行われない対象者（audience）の検証を
 **自分で実装する** 必要があります。
-ペイロードをデコードして検証するミドルウェアを自分の手で実装すべきなのです。
+例えば、ペイロードをデコードして検証するミドルウェアのようなものです。
 
 今回は CVE が降りましたが、
 根本的原因は利用者のミドルウェア利用の用法ミスに起因するものであり、
 Hono 自体の脆弱性、あるいは Hono の JWT ミドルウェアの脆弱性とは
 考えづらいというのが筆者の意見です。
 
+ただし、JWT ミドルウェアで`iss`検証ができるオプションが存在する以上、
+`aud`検証も同様にオプションで提供されることは自然な方針です。
+
 `aud` を検証できるオプションの追加という修正は
 利用者のミドルウェア利用の用法ミスを防ぐための Hono 側の配慮であって
-Hono の JWT ミドルウェアの脆弱性ではないですし、
+Hono の JWT ミドルウェア自体に存在した脆弱性ではないですし、
 自動的に脆弱な実装が防がれるものでもありません。
 
 :::details もう一つの解決策
@@ -367,6 +450,9 @@ OAuth リソースサーバ向けに特化したアクセストークン検証�
 # 他フレームワークの対応
 
 Hono 以外のフレームワークではどのような対応がされているでしょうか。
+他フレームワークも JWT 検証ミドルウェアに
+`aud`検証を行うオプションを提供しているのでしょうか？
+また、リソースサーバ用のミドルウェアを提供しているのでしょうか？
 
 ## Express.js
 
@@ -378,11 +464,15 @@ Auth0 が提供する [express-jwt](https://github.com/auth0/express-jwt) があ
 JWT の検証に加え、`iss`/`aud` 検証も行います。
 `scope` 検証には未対応の模様です。
 
+https://github.com/auth0/express-jwt
+
 次に、OAuth リソースサーバ向けのミドルウェアを紹介します。
 Auth0 が提供するミドルウェア [node-oauth2-jwt-bearer](https://github.com/auth0/node-oauth2-jwt-bearer/tree/main/packages/express-oauth2-jwt-bearer) があります。
 `jose` をベースに開発されており、
 JWT の検証に加え、`iss`/`aud` 検証も行います。
 `scope` 検証にも対応しています。
+
+https://github.com/auth0/node-oauth2-jwt-bearer/tree/main/packages/express-oauth2-jwt-bearer
 
 ## Fastify
 
@@ -394,11 +484,15 @@ Fastify でも、単なる JWT 検証ミドルウェアと OAuth リソースサ
 JWT の検証に加え、`iss`/`aud` 検証もサポートしています。
 `scope` 検証には未対応の模様です。
 
+https://github.com/nearform/fastify-jwt-jwks
+
 次に、OAuth リソースサーバ向けのミドルウェアを紹介します。
 Auth0 が提供するミドルウェア [auth0-fastify-api](https://github.com/auth0/auth0-fastify/tree/main/packages/auth0-fastify-api) があります。
 `jose` をベースに開発されており、
 JWT の検証に加え、`iss`/`aud` 検証も行います。
 `scope` 検証にも対応しています。
+
+https://github.com/auth0/auth0-fastify/tree/main/packages/auth0-fastify-api
 
 ## Elysia
 
@@ -410,11 +504,15 @@ Elysia でも、単なる JWT 検証ミドルウェアと OAuth リソースサ�
 JWT の検証に加え、`iss`/`aud` 検証もサポートしています。
 `scope` 検証には未対応の模様です。
 
+https://github.com/elysiajs/elysia-jwt
+
 次に、OAuth リソースサーバ向けのミドルウェアを紹介します。
-有志によるプラグイン [elysia-oauth2-resource-server](https://github.com/ap-1/elysia-oauth2-resource-server) があります。
+公式ではありませんが、
+有志によるプラグイン [elysia-oauth2-resource-server](https://github.com/ap-1/elysia-oauth2-resource-server) が存在しています。
 `jose` をベースに開発されており、
 JWT の検証に加え、`iss`/`aud` 検証もサポートしています。
 `scope` 検証にも対応しています。
+https://github.com/ap-1/elysia-oauth2-resource-server
 
 ## ミドルウェア調査のまとめ
 
@@ -453,7 +551,7 @@ JWT 検証ミドルウェアにおいて `iss`/`aud` 検証をサポートして
 セッションを管理したいのであれば、外部の認可サーバの仕組みを使う必要はありません。
 
 OAuth アクセストークンは API 間の認可を行うためのトークンであり
-クライアント・サーバ間のセッションを管理するためのトークンではありません。
+**クライアント・サーバ間のセッションを管理するためのトークンではありません。**
 
 そもそも OAuth アクセストークンをクライアント・サーバ間のセッションとして使うと
 OAuth クライアントを Public Client として実装する必要があり、
