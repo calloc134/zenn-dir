@@ -2,13 +2,17 @@
 title: "【OAuth】アクセストークンの検証をサボると成りすまし攻撃ができます"
 emoji: "🎃"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: ["OAuth", "JWT", "セキュリティ"]
+topics: ["OAuth", "OIDC", "JWT", "セキュリティ"]
 published: false
 ---
 
 # はじめに
 
 こんにちは。calloc134 です。
+Digital Identity 技術勉強会 #iddance Advent Calendar 2025
+18 日目の記事です。
+
+https://qiita.com/advent-calendar/2025/iddance
 
 近年、Auth0 などの外部認証プロバイダを用いて、
 OAuth/OIDC ベースでログインを実装するサービスが増えています。
@@ -112,6 +116,7 @@ https://frontend-client-a.calloc134personal.workers.dev/
 **サービス B**
 https://frontend-client-b.calloc134personal.workers.dev/
 
+https://github.com/calloc134/hono-oauth-jwt-vuln-poc
 今回の概念実証では Auth0 と Hono を利用しています。
 
 サービス A とサービス B はそれぞれ、
@@ -297,6 +302,8 @@ OAuth アクセストークンが JWT 形式で発行される場合を想定し
 
 OAuth においてアクセストークンを JWT 形式にする仕様としては、
 **RFC 9068 OAuth 2.0 JWT Access Tokens** があります。
+
+https://tex2e.github.io/rfc-translater/html/rfc9068.html
 
 Auth0 もほぼ同じような形式を利用しており、
 デフォルトでは Auth0 独自形式ですが、RFC 9068 との差異は一部のみであり、
@@ -679,11 +686,11 @@ sequenceDiagram
 
 ```
 
-この構成では、OAuth のアクセストークンを一切利用せず、
-代わりに ID トークンを利用しています。これはなぜでしょうか？
+この構成では、OAuth のアクセストークンを利用せず、
+代わりに ID トークンを検証しています。これはなぜでしょうか？
 
 構成の変更により、バックエンド API をリソースとして認可する必要がなくなり、
-フローにおいて認可をする部分がなくなりました。
+フローにおいてリソース認可が発生していません。
 また、バックエンド API は OAuth リソースサーバとして動作しなくなりました。
 
 今回の構成では、バックエンド API は OAuth リソースサーバとして動作せず
@@ -1193,3 +1200,11 @@ OAuth 仕様というのは複雑です。
 どちらにせよ、十分な理解のもとで、正しい実装を行うことが重要です。
 
 皆さんも雰囲気 OAuth を避け、仕様をよく理解した上で安全な実装を心がけましょう！
+
+# 宣伝
+
+OAuth / OIDC に関する書籍を執筆しています。
+かわいいイラスト付きで OAuth / OIDC を完全に理解していきましょう！
+24 日までに書き上げられることを目指します・・・
+
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc
