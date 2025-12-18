@@ -3,7 +3,7 @@ title: "【OAuth】アクセストークンの検証をサボると成りすま�
 emoji: "🎃"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["OAuth", "OIDC", "JWT", "セキュリティ"]
-published: false
+published: true
 ---
 
 # はじめに
