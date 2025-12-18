@@ -645,6 +645,8 @@ Auth0 を利用して IDaaS プロバイダでログインを行いながらも�
 バックエンドの発行するクッキーを用いたセッション管理を行う例を示します。
 この場合、ライブラリは`@auth0/auth0-hono`を利用すべきです。
 
+https://github.com/auth0-lab/auth0-hono
+
 この場合のフローについては以下の通りです。
 
 ```mermaid
@@ -696,9 +698,180 @@ ID トークンを検証すれば良いのです。
 バックエンド API は 認証としての運用に特化した ID トークンを検証すれば良く、
 OIDC の仕組みに従った実装が可能になります。
 
+では、バックエンド API 側の実装例を示します。
+
+```ts
+// Cookie を送受信したいので credentials を true にする（origin は * ではなく明示）
+app.use(
+  "*",
+  cors({
+    origin: FRONT_ORIGIN,
+    credentials: true,
+  })
+);
+
+// Cookie 認証は CSRF 対策が必要になりやすいので、最低限 Origin ベースで保護（任意）
+app.use(
+  "*",
+  csrf({
+    origin: FRONT_ORIGIN,
+  })
+);
+
+// Auth0 (OIDC) - BFFは confidential client として動作
+app.use(
+  auth({
+    domain: process.env.AUTH0_DOMAIN!,
+    clientID: process.env.AUTH0_CLIENT_ID!,
+    clientSecret: process.env.AUTH0_CLIENT_SECRET!, // confidential client なので
+    baseURL: process.env.BASE_URL!, // バックエンドのBASE_URL
+    authRequired: false, // 必要なAPIだけ認証を要求
+    session: {
+      secret: process.env.AUTH0_SESSION_ENCRYPTION_KEY!, // セッション暗号化キー
+      cookie: {
+        sameSite: "lax",
+        secure: true,
+      },
+    },
+    authorizationParams: {
+      response_type: "code",
+      scope: "openid profile email",
+    },
+  })
+);
+
+// 認証が必要な API（BFFの“セッション”で守る）
+app.get("/api/me", requiresAuth(), (c) => {
+  // README例: c.var.oidc.user でユーザー情報にアクセスできる
+  return c.json({ user: c.var.oidc.user });
+});
+```
+
+このコードでは、
+`auth` ミドルウェアで OIDC 認証を有効化しています。
+
+また、認証の必要なルートについては `requiresAuth()` ミドルウェアを利用し、
+セッションが有効かどうかを検証しています。
+検証が正しければ認証成功とし、ユーザ情報をコンテキストにセットしています。
+
+`@auth0/auth0-hono` の実装では、
+内部で`@auth0/auth0-server-js`を利用しており、
+そちらにクッキー保存処理が存在しています。
+
+https://github.com/auth0/auth0-auth-js/tree/main/packages/auth0-server-js
+
+`@auth0/auth0-server-js` の実装では
+クッキーに JWT (JWE) 形式のセッション情報を保存しています。
+暗号化されることで、改ざん検知と情報漏洩防止が実現されています。
+
+また、クッキーは`@auth0/auth0-server-js` の実装により
+自動で `HttpOnly` 属性付きで発行されるため、
+クライアント側の JavaScript からは読めません。
+
+なお、クッキーを CORS ポリシーに引っかからずに送信するための設定を行い、
+CSRF 対策を最低限実装しています。
+また、フロントエンド・バックエンドがサブドメインでなく別ドメインの場合は
+sameSite 属性を "none" にする必要があります。
+また、本番環境で https を利用している場合は secure 属性も true にしてください。
+
+次にフロントエンド側、React のコード例です。
+React 自体のコードではなく、API 呼び出し部分のみ抜粋しています。
+
+```ts
+export async function me() {
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    method: "GET",
+    credentials: "include", // ← Cookie を送る
+  });
+
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ user: { id: string } }>;
+}
+```
+
+このコードでは、`fetch` のオプションで `credentials: "include"` を指定し、
+クッキーを送信しています。
+こうすることで、バックエンド側でクッキーを読み取れるようになります。
+
+なお、`fetch`のオプションで`credentials: "include"` を指定する場合、
+クッキーが`HttpOnly`であっても問題なく送信されます。
+このようにすることで、
+**クライアント側でクッキーを JavaScript から読めないように**し、
+悪意のある JavaScript からの盗み見を防止できます。
+
+このコードでは、OIDC に関連する仕組みは
+一切登場しないことがわかると思います。
+
+なお、ログイン・ログアウト処理について解説します。
+
+バックエンド側コードについて、
+ログインについては`@auth0/auth0-hono` が
+`/auth/login` および
+`/auth/logout` エンドポイントを提供しているため、
+実装の必要はありません。
+
+フロントエンド側コードのログインコードは以下のように記述できます。
+
+```ts
+export function login(
+  returnTo = window.location.pathname + window.location.search
+) {
+  const url = new URL(`${API_BASE}/auth/login`);
+  url.searchParams.set("return_to", returnTo); // 例: "/dashboard?tab=a"
+  window.location.assign(url.toString());
+}
+```
+
+React からはこのように呼び出すと良いでしょう。
+
+```tsx
+import { useEffect } from "react";
+
+export function RequireLogin({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    (async () => {
+      const user = await me();
+      if (!user) login(window.location.pathname + window.location.search);
+    })();
+  }, []);
+
+  return <>{children}</>;
+}
+```
+
+ログアウト処理についても同様に実装します。
+
+```ts
+export function logout() {
+  window.location.assign(`${API_BASE}/auth/logout`);
+}
+```
+
+React からはこのように呼び出すと良いでしょう。
+
+```tsx
+import { useEffect } from "react";
+import { logout } from "./api"; // window.location.assignするlogout()
+
+export function LogoutPage() {
+  useEffect(() => {
+    logout();
+  }, []);
+
+  return null; // もしくは "Logging out..." を表示
+}
+```
+
+fetch で API を呼び出すのではなく、
+ナビゲーションで画面遷移をして
+それぞれのエンドポイントを呼び出す形があることに注意してください。
+
 :::details 自前での実装
 自前でセッション管理を実装する場合、
 `@hono/session` パッケージを利用すると便利です。
+https://github.com/honojs/middleware/tree/main/packages/session
+
 その際、`@hono/session`自体はログイン検証処理を提供しないため、
 ログイン検証処理は自前で実装する必要があります。
 
@@ -756,11 +929,21 @@ app.get("/auth/me", requireAuth, (c) => {
 `@hono/session` の実装では、
 クッキーに JWT (JWE) 形式のセッション情報を保存しています。
 暗号化されることで、改ざん検知と情報漏洩防止が実現されています。
+
 また、クッキーは自動で `HttpOnly` 属性付きで発行されるため、
 クライアント側の JavaScript からは読めません。
 
 なお、クッキーを CORS ポリシーに引っかからずに送信するための設定を行い、
 CSRF 対策を最低限実装しています。
+また、フロントエンド・バックエンドがサブドメインでなく別ドメインの場合は
+sameSite 属性を "none" にする必要があります。
+
+:::message
+
+`@hono/session` には、
+クッキーに`Secure`属性を自動で付与するオプションは存在しないようです。
+
+:::
 
 次にフロントエンド側、React のコード例です。
 React 自体のコードではなく、API 呼び出し部分のみ抜粋しています。
