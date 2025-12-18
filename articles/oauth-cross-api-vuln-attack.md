@@ -613,17 +613,22 @@ https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/15-client-types
 
 以上、しっかりと理解した上で、安全な実装を心がけましょう！
 
-# 余談: 代わりに好まれる構成の実装例 (自前パスワード認証)
+# 余談: 代わりに好まれる構成の実装例
 
 先程の解説では、バックエンドの発行するクッキーを用いたセッション管理を推奨しました。
+では、Hono をバックエンドに利用した際の、代わりの構成の例を紹介します。
 
-Hono をバックエンドに利用した際の、代わりの構成の例を紹介します。
-筆者は、Hono の `hono/cookie`と`hono/jwt` ユーティリティを用いて
-自前でミドルウェアを実装し、
-クッキーベースで API アクセスをする構成を採用しています。
+今回のこの記事では、Auth0 を利用して外部の IDaaS プロバイダでログインを行っていました。
+Auth0 を利用して IDaaS プロバイダでログインを行いながらも、
+バックエンドの発行するクッキーを用いたセッション管理を行う例を示します。
+
+:::details 自前での実装
+自前でセッション管理を実装する場合、
+`@hono/session` パッケージを利用すると便利です。
+その際、`@hono/session`自体はログイン検証処理を提供しないため、
+ログイン検証処理は自前で実装する必要があります。
 
 参考となるコードについて提示します。
-
 まずはバックエンド側、Hono のコードです。
 
 ```ts
@@ -644,25 +649,24 @@ app.use(
   })
 );
 
-const cookieOptions = () => ({
-  httpOnly: true,
-  secure: isProd, // 本番は HTTPS 前提で true 推奨
-  sameSite: "Lax" as const, // 別サイト運用なら 'None' + secure:true が必要
-  path: "/",
-  maxAge: 60 * 60, // 1h（秒）
-});
+// セッションを有効化
+app.use(
+  "*",
+  useSession<AppSessionData>({
+    // 1h（秒）: 元記事の maxAge / exp と同等のイメージ
+    duration: { absolute: 60 * 60 },
+  })
+);
 
 const requireAuth: Parameters<typeof app.get>[1] = async (c, next) => {
-  const token = getCookie(c, COOKIE_NAME);
-  if (!token) return c.json({ message: "Unauthorized" }, 401);
+  // セッションデータ取得（未ログインなら null）
+  const data = await c.var.session.get();
+  const user = data?.user;
 
-  try {
-    const payload = (await verify(token, JWT_SECRET)) as AccessTokenPayload;
-    c.set("user", { id: payload.sub });
-    await next();
-  } catch {
-    return c.json({ message: "Unauthorized" }, 401);
-  }
+  if (!user) return c.json({ message: "Unauthorized" }, 401);
+
+  c.set("user", user);
+  await next();
 };
 
 // 認証状態確認（フロントは HttpOnly Cookie を読めないので、この API を叩いて判断する）
@@ -671,9 +675,8 @@ app.get("/auth/me", requireAuth, (c) => {
 });
 ```
 
-このコードでは、`requireAuth` ミドルウェアで
-まずクッキーを読み取り、
-クッキーの中に含まれる JWT を検証しています。
+このコードでは、`requireAuth` ミドルウェアでセッションを読み取り
+セッションが存在しない、かつユーザが存在しない場合は 401 エラーを返しています。
 検証が正しければ認証成功とし、ユーザ情報をコンテキストにセットしています。
 
 なお、クッキーを CORS ポリシーに引っかからずに送信するための設定を行い、
@@ -711,30 +714,21 @@ export async function me() {
 バックエンド側コード:
 
 ```ts
-// ログイン（JWT を発行して HttpOnly Cookie に保存）
+// ログイン（JWT を発行して Cookie に保存）→ セッションに user を保存
 app.post("/auth/login", async (c) => {
   // ログイン処理は省略（適宜実装してください）
   // パスワード認証でも良いし、ここで外部 IDaaS プロバイダを呼んでも良い
 
-  const now = Math.floor(Date.now() / 1000);
-  const payload: AccessTokenPayload = {
-    sub: "user_123",
-    iat: now,
-    exp: now + 60 * 60,
-  };
-
-  const jwt = await sign(payload, JWT_SECRET);
-  setCookie(c, COOKIE_NAME, jwt, cookieOptions());
+  await c.var.session.update({
+    user: { id: "user_123" },
+  });
 
   return c.json({ ok: true });
 });
 
-// ログアウト（Cookie を削除）
+// ログアウト（Cookie を削除）→ セッション削除
 app.post("/auth/logout", (c) => {
-  deleteCookie(c, COOKIE_NAME, {
-    path: "/",
-    secure: isProd,
-  });
+  c.var.session.delete();
   return c.json({ ok: true });
 });
 ```
@@ -744,10 +738,9 @@ app.post("/auth/logout", (c) => {
 `HttpOnly` 属性付きのクッキーに保存しています。
 コメント部分では任意のユーザ認証処理を実装してください。
 
-ログアウト API では、
-単にクッキーを削除しています。
+ログアウト API では単にクッキーを削除しています。
 
-フロントエンド側コード:
+フロントエンド側コードは以下のようになります。
 
 ```ts
 export async function login(email: string, password: string) {
@@ -777,7 +770,8 @@ export async function logout() {
 サーバ側でクッキーが操作されるため、これで問題ありません。
 
 :::message
-今回はクッキーの上に JWT を載せる形で実装しましたが、
+今回はクッキーの上に 情報を含んだトークンを載せる実装例を紹介しました。
+
 クッキーの上にアサーション式トークンを載せるこの実装は
 **ステートレスセッション** と呼称されることが多いです。
 この特性のセッションには以下の特徴があります。
@@ -804,7 +798,7 @@ export async function logout() {
 これらの違いも踏まえた上で、要件に応じて適切な方式を選択してください。
 :::
 
-:::message
+# 余談: 対称鍵署名と非対称鍵署名の使い分け
 
 バックエンドサーバが JWT を発行する場合、
 対称鍵署名（HMAC）を用いることが多いです。
@@ -822,12 +816,6 @@ export async function logout() {
 具体的には、`RS256` や `ES256` アルゴリズムがよく使われます。
 
 この違いをしっかり理解しておきましょう。
-
-:::
-
-# 余談: 代わりに好まれる構成の実装例 (IDaaS プロバイダ利用)
-
-(執筆中)
 
 # 余談: プロバイダごとのテナント分離機能と攻撃困難さ
 
