@@ -631,7 +631,7 @@ https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps#name-b
 
 以上、しっかりと理解した上で、安全な実装を心がけましょう！
 
-# 余談: 代わりに好まれる構成の実装例
+# 代わりに好まれる構成の実装例
 
 先程の解説では、バックエンドの発行するクッキーを用いたセッション管理である
 "Backend For Frontend (BFF)" パターンを推奨しました。
@@ -645,6 +645,56 @@ Auth0 を利用して IDaaS プロバイダでログインを行いながらも�
 バックエンドの発行するクッキーを用いたセッション管理を行う例を示します。
 この場合、ライブラリは`@auth0/auth0-hono`を利用すべきです。
 
+この場合のフローについては以下の通りです。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as ユーザー（ブラウザ/SPA）
+    participant BFF as BFF（OAuth Confidential Client）
+    participant AS as 認可サーバ（AuthZ/Token）
+
+    %% C-D: ログイン開始（ナビゲーション → ASへリダイレクト）
+    U->>BFF: ログイン開始（/login へナビゲーション）
+    BFF-->>U: リダイレクト
+    U->>AS: 認可要求（Authorization Code + PKCE）
+    AS-->>U: ログイン/同意画面
+    U->>AS: 認証・同意
+    AS-->>U: リダイレクト
+
+    %% E-F: code を BFF が受け取り、トークン交換（client認証 + PKCE）
+    U->>BFF: redirect_uri 呼び出し（code 受け渡し）
+    BFF->>AS: トークン要求（code + code_verifier + client認証）
+    AS-->>BFF: トークン応答（access_token / (id_token)）
+
+    %% G-H: BFFがセッション確立（cookie）→ アプリへ戻す
+    BFF->>BFF: IDトークンを用いてセッション確立
+    BFF-->>U: セッションクッキー割当
+
+    %% H-I: アプリ再ロード後に再度セッション確認
+    U->>BFF: セッションを用いてバックエンドAPI呼び出し
+    BFF-->>U: セッションあり（認証済み）
+
+```
+
+この構成では、OAuth のアクセストークンを一切利用せず、
+代わりに ID トークンを利用しています。これはなぜでしょうか？
+
+構成の変更により、バックエンド API をリソースとして認可する必要がなくなり、
+フローにおいて認可をする部分がなくなりました。
+また、バックエンド API は OAuth リソースサーバとして動作しなくなりました。
+
+今回の構成では、バックエンド API は OAuth リソースサーバとして動作せず
+OIDC における Relying Party (RP) として動作します。
+Relying Party (RP) とは、OAuth におけるクライアントに相当します。
+
+アクセストークンとはリソースサーバが検証するためのトークンであり、
+ID トークンとは Relying Party (RP) がユーザの身分証明のために検証するトークンです。
+したがって、バックエンド API は Relying Party (RP) として
+ID トークンを検証すれば良いのです。
+
+バックエンド API は 認証としての運用に特化した ID トークンを検証すれば良く、
+OIDC の仕組みに従った実装が可能になります。
 
 :::details 自前での実装
 自前でセッション管理を実装する場合、
