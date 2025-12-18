@@ -225,6 +225,12 @@ OAuth 仕様に照らすと、
 - **フロントエンド** = OAuth クライアント（Public Client といえる）
 - **バックエンド API** = OAuth リソースサーバ
 
+この構成は、
+「OAuth 2.0 for Browser-Based Applications」というドラフトにおいて、
+"Browser-based OAuth 2.0 client"として定義されています。
+
+https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps#name-browser-based-oauth-20-clie
+
 先程のフロー図を OAuth の登場人物で表現すると以下のようになります。
 
 ```mermaid
@@ -538,7 +544,11 @@ JWT 検証ミドルウェアにおいて `iss`/`aud` 検証をサポートして
 - バックエンド API = OAuth リソースサーバ
 - アクセストークンをクライアント・サーバ間のセッションとして利用
 
-とする構成は、果たして行儀が良いのでしょうか？
+とする構成、
+
+いわゆる
+"Browser-based OAuth 2.0 client"構成は、
+果たして行儀が良いのでしょうか？
 
 筆者の意見では、
 **この構成は基本的に避けるべきだと考えています。**
@@ -587,11 +597,19 @@ https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/15-client-types
 フロントエンドを Public Client として動作させ
 アクセストークンをセッションのように使う例は、実際のサービスでも頻繁に見られます。
 しかし、**可能であれば避けるべき**というのが筆者の意見です。
+"OAuth 2.0 for Browser-Based Applications" ドラフトでも
+同様の指摘がなされています。
 
 そしてこの構成は、OAuth の仕様を正しく理解していない状態で実装すると
 脆弱性の温床になりやすいです。
 その代わり、
 **バックエンドで発行するクッキーを用いたセッション管理**を推奨したいと思います。
+
+この構成は、
+"OAuth 2.0 for Browser-Based Applications " ドラフトでは
+"Backend For Frontend (BFF)" パターンと呼称されます。
+
+https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps#name-backend-for-frontend-bff
 
 # 結論
 
@@ -615,12 +633,18 @@ https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/15-client-types
 
 # 余談: 代わりに好まれる構成の実装例
 
-先程の解説では、バックエンドの発行するクッキーを用いたセッション管理を推奨しました。
-では、Hono をバックエンドに利用した際の、代わりの構成の例を紹介します。
+先程の解説では、バックエンドの発行するクッキーを用いたセッション管理である
+"Backend For Frontend (BFF)" パターンを推奨しました。
+では、Hono バックエンドでこのパターンを実装する場合、
+どうすれば良いでしょうか？
 
 今回のこの記事では、Auth0 を利用して外部の IDaaS プロバイダでログインを行っていました。
+代わりの実装でも IDaaS ログインの利用については変更しない方針とします。
+
 Auth0 を利用して IDaaS プロバイダでログインを行いながらも、
 バックエンドの発行するクッキーを用いたセッション管理を行う例を示します。
+この場合、ライブラリは`@auth0/auth0-hono`を利用すべきです。
+
 
 :::details 自前での実装
 自前でセッション管理を実装する場合、
@@ -678,6 +702,12 @@ app.get("/auth/me", requireAuth, (c) => {
 このコードでは、`requireAuth` ミドルウェアでセッションを読み取り
 セッションが存在しない、かつユーザが存在しない場合は 401 エラーを返しています。
 検証が正しければ認証成功とし、ユーザ情報をコンテキストにセットしています。
+
+`@hono/session` の実装では、
+クッキーに JWT (JWE) 形式のセッション情報を保存しています。
+暗号化されることで、改ざん検知と情報漏洩防止が実現されています。
+また、クッキーは自動で `HttpOnly` 属性付きで発行されるため、
+クライアント側の JavaScript からは読めません。
 
 なお、クッキーを CORS ポリシーに引っかからずに送信するための設定を行い、
 CSRF 対策を最低限実装しています。
