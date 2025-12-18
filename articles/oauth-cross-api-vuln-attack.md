@@ -786,7 +786,7 @@ React 自体のコードではなく、API 呼び出し部分のみ抜粋して�
 
 ```ts
 export async function me() {
-  const res = await fetch(`${API_BASE}/auth/me`, {
+  const res = await fetch(`${API_BASE}/api/me`, {
     method: "GET",
     credentials: "include", // ← Cookie を送る
   });
@@ -924,7 +924,7 @@ const requireAuth: Parameters<typeof app.get>[1] = async (c, next) => {
 };
 
 // 認証状態確認（フロントは HttpOnly Cookie を読めないので、この API を叩いて判断する）
-app.get("/auth/me", requireAuth, (c) => {
+app.get("/api/me", requireAuth, (c) => {
   return c.json({ user: c.get("user") });
 });
 ```
@@ -954,7 +954,7 @@ React 自体のコードではなく、API 呼び出し部分のみ抜粋して�
 
 ```ts
 export async function me() {
-  const res = await fetch(`${API_BASE}/auth/me`, {
+  const res = await fetch(`${API_BASE}/api/me`, {
     method: "GET",
     credentials: "include", // ← Cookie を送る
   });
