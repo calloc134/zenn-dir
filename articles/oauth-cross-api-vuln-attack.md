@@ -712,6 +712,9 @@ OIDC の仕組みに従った実装が可能になります。
 GitHub リポジトリで公開したので、これを参考にしてください。
 https://github.com/calloc134/hono-oidc-bff-pattern-example?tab=readme-ov-file
 
+また、Cloudflare Workers 環境でサンプルを公開しています。
+https://hono-oidc-bff-pattern-example-frontend.calloc134personal.workers.dev/
+
 なお、バックエンドとフロントエンドが別ドメインであるケースを想定し、
 実装が少し複雑になっていることをお詫び申し上げます。
 
