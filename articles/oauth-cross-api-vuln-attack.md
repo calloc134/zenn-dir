@@ -1000,6 +1000,19 @@ export async function me(): Promise<{ user: User } | null> {
 このコード自体には、OIDC に関連する仕組みは
 一切登場しないことがわかると思います。
 
+### Auth0 ダッシュボード
+
+なお、Auth0 ダッシュボードでのアプリケーション設定例は以下の通りです。
+
+- 「一般的な Web アプリケーション」で作成
+- callback と Web オリジンを設定
+
+Confidential Client として作成するため、「一般的な Web アプリケーション」を選択します。
+
+![](/images/oauth-cross-api-vuln-attack/2025-12-19-22-58-51.png)
+
+![](/images/oauth-cross-api-vuln-attack/2025-12-19-22-59-42.png)
+
 :::details 自前での実装
 自前でセッション管理を実装する場合、
 `@hono/session` パッケージを利用すると便利です。
