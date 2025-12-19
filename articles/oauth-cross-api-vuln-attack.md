@@ -1,5 +1,5 @@
 ---
-title: "【OAuth】アクセストークンの検証をサボると成りすまし攻撃ができます"
+title: "【OAuth】アクセストークンの検証を誤ると成りすまし攻撃ができます"
 emoji: "🎃"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["OAuth", "OIDC", "JWT", "セキュリティ"]
@@ -743,6 +743,11 @@ app.use(
     authorizationParams: {
       response_type: "code",
       scope: "openid profile email",
+    },
+    routes: {
+      login: "/auth/login",
+      callback: "/auth/callback",
+      logout: "/auth/logout",
     },
   })
 );
