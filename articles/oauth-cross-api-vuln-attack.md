@@ -686,11 +686,12 @@ sequenceDiagram
 
 ```
 
+:::message
 この構成では、OAuth のアクセストークンを利用せず、
 代わりに ID トークンを検証しています。これはなぜでしょうか？
 
 構成の変更により、バックエンド API をリソースとして認可する必要がなくなり、
-フローにおいてリソース認可が発生していません。
+**フローにおいてリソース認可が発生していません**。
 また、バックエンド API は OAuth リソースサーバとして動作しなくなりました。
 
 今回の構成では、バックエンド API は OAuth リソースサーバとして動作せず
@@ -699,42 +700,45 @@ Relying Party (RP) とは、OAuth におけるクライアントに相当しま�
 
 アクセストークンとはリソースサーバが検証するためのトークンであり、
 ID トークンとは Relying Party (RP) がユーザの身分証明のために検証するトークンです。
-したがって、バックエンド API は Relying Party (RP) として
-ID トークンを検証すれば良いのです。
+したがって、バックエンド API は **Relying Party (RP) として**
+**ID トークンを検証すれば良い**のです。
 
 バックエンド API は 認証としての運用に特化した ID トークンを検証すれば良く、
 OIDC の仕組みに従った実装が可能になります。
 
-では、バックエンド API 側の実装例を示します。
+:::
+
+では、実装例を示します。
+GitHub リポジトリで公開したので、これを参考にしてください。
+https://github.com/calloc134/hono-oidc-bff-pattern-example?tab=readme-ov-file
+
+なお、バックエンドとフロントエンドが別ドメインであるケースを想定し、
+実装が少し複雑になっていることをお詫び申し上げます。
+
+## バックエンド側コード例
+
+### `auth0` ミドルウェア
+
+このコードでは、
+`auth` ミドルウェアで OIDC 認証を有効化しています。
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/middleware/auth0.ts#L5-L32
+
+クッキーでは Secure 属性および SameSite 属性を設定し
+セキュリティを確保しています。
+
+`authRequired` オプションを利用することで、
+すべてのルートではなく必要なルートだけ認証を要求するようにしています。
 
 ```ts
-// Cookie を送受信したいので credentials を true にする（origin は * ではなく明示）
-app.use(
-  "*",
-  cors({
-    origin: FRONT_ORIGIN,
-    credentials: true,
-  })
-);
-
-// Cookie 認証は CSRF 対策が必要になりやすいので、最低限 Origin ベースで保護（任意）
-app.use(
-  "*",
-  csrf({
-    origin: FRONT_ORIGIN,
-  })
-);
-
-// Auth0 (OIDC) - BFFは confidential client として動作
-app.use(
-  auth({
-    domain: process.env.AUTH0_DOMAIN!,
-    clientID: process.env.AUTH0_CLIENT_ID!,
-    clientSecret: process.env.AUTH0_CLIENT_SECRET!, // confidential client なので
-    baseURL: process.env.BASE_URL!, // バックエンドのBASE_URL
+export const auth0Middleware: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const mw = auth({
+    domain: c.env.AUTH0_DOMAIN,
+    clientID: c.env.AUTH0_CLIENT_ID,
+    clientSecret: c.env.AUTH0_CLIENT_SECRET,
+    baseURL: c.env.BASE_URL,
     authRequired: false, // 必要なAPIだけ認証を要求
     session: {
-      secret: process.env.AUTH0_SESSION_ENCRYPTION_KEY!, // セッション暗号化キー
+      secret: c.env.AUTH0_SESSION_ENCRYPTION_KEY,
       cookie: {
         sameSite: "lax",
         secure: true,
@@ -745,24 +749,104 @@ app.use(
       scope: "openid profile email",
     },
     routes: {
-      login: "/auth/login",
       callback: "/auth/callback",
-      logout: "/auth/logout",
     },
-  })
-);
+    customRoutes: ["login", "logout"],
+  });
 
-// 認証が必要な API（BFFの“セッション”で守る）
-app.get("/api/me", requiresAuth(), (c) => {
-  // README例: c.var.oidc.user でユーザー情報にアクセスできる
-  return c.json({ user: c.var.oidc.user });
+  return mw(c, next);
+};
+```
+
+### ログインルート
+
+ログインに関するルートコード例です。
+今回は、バックエンドとフロントエンドが別ドメインであるケースを想定しているため、
+ログイン後にフロントエンドにリダイレクトするための中継ルート `/auth/post-login` を設けています。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/routes/auth.ts#L8-L29
+
+```ts
+authRoutes.get("/login", (c, next) => {
+  const frontPath = normalizeReturnToPath(
+    c.req.query("return_to") || null,
+    c.env.FRONT_ORIGIN
+  );
+
+  const internalReturnTo = `/auth/post-login?return_to=${encodeURIComponent(
+    frontPath
+  )}`;
+
+  return login({ redirectAfterLogin: internalReturnTo })(c, next);
+});
+
+authRoutes.get("/post-login", requiresAuth(), (c) => {
+  const frontPath = normalizeReturnToPath(
+    c.req.query("return_to") || null,
+    c.env.FRONT_ORIGIN
+  );
+
+  const finalUrl = new URL(frontPath, c.env.FRONT_ORIGIN).toString();
+  return c.redirect(finalUrl);
 });
 ```
 
-このコードでは、
-`auth` ミドルウェアで OIDC 認証を有効化しています。
+auth0 ミドルウェアは、フローが完了した後のリダイレクト先を`redirectAfterLogin` オプションで指定できます。
+しかし同一ドメインでしかリダイレクトできないため、
+指定されたパスを十分に検証した上でフロントエンドにリダイレクトするための中継ルートを設けています。
+この中継ルートが`/auth/post-login`です。
 
-また、認証の必要なルートについては `requiresAuth()` ミドルウェアを利用し、
+この中継以外は、`login()` ヘルパーを呼び出すだけでログイン処理が完了します。
+
+### ログアウトルート
+
+ログアウトに関するルートコード例です。
+こちらも、バックエンドとフロントエンドが別ドメインであるケースを想定しているため、
+ログアウト後にフロントエンドにリダイレクトするための中継ルート `/auth/post-logout` を設けています。
+理由はログインルートと同様です。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/routes/auth.ts#L31C1-L53C4
+
+```ts
+authRoutes.post("/logout", async (c, next) => {
+  const body = await c.req.parseBody();
+  const rawReturnTo =
+    typeof body["return_to"] === "string" ? body["return_to"] : null;
+
+  const frontPath = normalizeReturnToPath(rawReturnTo, c.env.FRONT_ORIGIN);
+
+  const internalReturnTo = `/auth/post-logout?return_to=${encodeURIComponent(
+    frontPath
+  )}`;
+
+  return logout({ redirectAfterLogout: internalReturnTo })(c, next);
+});
+
+authRoutes.get("/post-logout", (c) => {
+  const frontPath = normalizeReturnToPath(
+    c.req.query("return_to") || null,
+    c.env.FRONT_ORIGIN
+  );
+
+  const finalUrl = new URL(frontPath, c.env.FRONT_ORIGIN).toString();
+  return c.redirect(finalUrl);
+});
+```
+
+### 認証必須ルート
+
+認証が必須なルートのコード例です。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/routes/api.ts#L6C1-L10C4
+
+```ts
+apiRoutes.get("/me", requiresAuth(), async (c) => {
+  const session = await c.var.auth0Client?.getSession(c);
+  return c.json({ user: session?.user });
+});
+```
+
+認証の必要なルートについては `requiresAuth()` ミドルウェアを利用し、
 セッションが有効かどうかを検証しています。
 検証が正しければ認証成功とし、ユーザ情報をコンテキストにセットしています。
 
@@ -780,25 +864,123 @@ https://github.com/auth0/auth0-auth-js/tree/main/packages/auth0-server-js
 自動で `HttpOnly` 属性付きで発行されるため、
 クライアント側の JavaScript からは読めません。
 
+### CORS と CSRF 対策
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/app.ts#L12C1-L27C6
+
+```ts
+// CORSミドルウェア - Cookie を送受信したいので credentials を true にする
+app.use("*", async (c, next) => {
+  const mw = cors({
+    origin: c.env.FRONT_ORIGIN,
+    credentials: true,
+  });
+  return mw(c, next);
+});
+
+// CSRFミドルウェア - Cookie 認証は CSRF 対策が必要
+app.use("*", async (c, next) => {
+  const mw = csrf({
+    origin: c.env.FRONT_ORIGIN,
+  });
+  return mw(c, next);
+});
+```
+
 なお、クッキーを CORS ポリシーに引っかからずに送信するための設定を行い、
 CSRF 対策を最低限実装しています。
 また、フロントエンド・バックエンドがサブドメインでなく別ドメインの場合は
 sameSite 属性を "none" にする必要があります。
 また、本番環境で https を利用している場合は secure 属性も true にしてください。
 
+## フロントエンド側コード例
+
 次にフロントエンド側、React のコード例です。
-React 自体のコードではなく、API 呼び出し部分のみ抜粋しています。
+
+### ログイン部分
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/auth.ts#L3C1-L13C2
 
 ```ts
-export async function me() {
-  const res = await fetch(`${API_BASE}/api/me`, {
-    method: "GET",
-    credentials: "include", // ← Cookie を送る
+export function login(
+  returnTo = window.location.pathname + window.location.search
+): void {
+  const url = new URL("/auth/login", API_BASE);
+  url.searchParams.set("return_to", returnTo);
+  window.location.assign(url.toString());
+}
+```
+
+`return_to` パラメータでログイン後のリダイレクト先を指定しています。
+その後、`window.location.assign()` でログインルートに遷移しています。
+
+### ログアウト部分
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/auth.ts#L15C1-L33C2
+
+```ts
+export function logout(
+  returnTo = window.location.pathname + window.location.search
+): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = new URL("/auth/logout", API_BASE).toString();
+
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "return_to";
+  input.value = returnTo;
+
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+}
+```
+
+`return_to` パラメータでログアウト後のリダイレクト先を指定しています。
+その後、フォームを動的に生成してログアウトルートに POST リクエストを送信しています。
+
+### 認証必須ルート呼び出し部分
+
+クッキーが必須な API 呼び出し部分のコード例です。
+`fetch`をラップしたユーティリティ関数を用意すると便利です。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/client.ts#L17C1-L33C2
+
+```ts
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const url = new URL(path, API_BASE);
+  const res = await fetch(url.toString(), {
+    credentials: "include",
+    ...init,
   });
 
-  if (res.status === 401) return null;
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<{ user: { id: string } }>;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new ApiError(res.status, text);
+  }
+
+  return (await res.json()) as T;
+}
+```
+
+後は認証必須ルートを呼び出すだけです。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/me.ts#L12C1-L21C2
+
+```ts
+export async function me(): Promise<{ user: User } | null> {
+  try {
+    // apiFetch 側で credentials: "include" 済みなのでここは不要
+    return await apiFetch<{ user: User }>("/api/me", { method: "GET" });
+  } catch (e) {
+    // 未認証は「エラー」ではなく「未ログイン」
+    if (e instanceof ApiError && e.status === 401) return null;
+    throw e;
+  }
 }
 ```
 
@@ -812,72 +994,11 @@ export async function me() {
 **クライアント側でクッキーを JavaScript から読めないように**し、
 悪意のある JavaScript からの盗み見を防止できます。
 
-このコードでは、OIDC に関連する仕組みは
+コンポーネント部分などのコードは省略しますが、
+必要があれば GitHub リポジトリを参照してください。
+
+このコード自体には、OIDC に関連する仕組みは
 一切登場しないことがわかると思います。
-
-なお、ログイン・ログアウト処理について解説します。
-
-バックエンド側コードについて、
-ログインについては`@auth0/auth0-hono` が
-`/auth/login` および
-`/auth/logout` エンドポイントを提供しているため、
-実装の必要はありません。
-
-フロントエンド側コードのログインコードは以下のように記述できます。
-
-```ts
-export function login(
-  returnTo = window.location.pathname + window.location.search
-) {
-  const url = new URL(`${API_BASE}/auth/login`);
-  url.searchParams.set("return_to", returnTo); // 例: "/dashboard?tab=a"
-  window.location.assign(url.toString());
-}
-```
-
-React からはこのように呼び出すと良いでしょう。
-
-```tsx
-import { useEffect } from "react";
-
-export function RequireLogin({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    (async () => {
-      const user = await me();
-      if (!user) login(window.location.pathname + window.location.search);
-    })();
-  }, []);
-
-  return <>{children}</>;
-}
-```
-
-ログアウト処理についても同様に実装します。
-
-```ts
-export function logout() {
-  window.location.assign(`${API_BASE}/auth/logout`);
-}
-```
-
-React からはこのように呼び出すと良いでしょう。
-
-```tsx
-import { useEffect } from "react";
-import { logout } from "./api"; // window.location.assignするlogout()
-
-export function LogoutPage() {
-  useEffect(() => {
-    logout();
-  }, []);
-
-  return null; // もしくは "Logging out..." を表示
-}
-```
-
-fetch で API を呼び出すのではなく、
-ナビゲーションで画面遷移をして
-それぞれのエンドポイントを呼び出す形があることに注意してください。
 
 :::details 自前での実装
 自前でセッション管理を実装する場合、
