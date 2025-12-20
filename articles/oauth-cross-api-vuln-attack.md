@@ -724,7 +724,7 @@ https://hono-oidc-bff-pattern-example-frontend.calloc134personal.workers.dev/
 
 このコードでは、
 `auth` ミドルウェアで OIDC 認証を有効化しています。
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/middleware/auth0.ts#L5-L32
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/backend/src/middleware/auth0.ts#L5-L32
 
 クッキーでは Secure 属性および SameSite 属性を設定し
 セキュリティを確保しています。
@@ -767,7 +767,7 @@ export const auth0Middleware: MiddlewareHandler<AppEnv> = async (c, next) => {
 今回は、バックエンドとフロントエンドが別ドメインであるケースを想定しているため、
 ログイン後にフロントエンドにリダイレクトするための中継ルート `/auth/post-login` を設けています。
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/routes/auth.ts#L8-L29
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/backend/src/routes/auth.ts#L8-L29
 
 ```ts
 authRoutes.get("/login", (c, next) => {
@@ -804,35 +804,16 @@ auth0 ミドルウェアは、フローが完了した後のリダイレクト�
 ### ログアウトルート
 
 ログアウトに関するルートコード例です。
-こちらも、バックエンドとフロントエンドが別ドメインであるケースを想定しているため、
-ログアウト後にフロントエンドにリダイレクトするための中継ルート `/auth/post-logout` を設けています。
-理由はログインルートと同様です。
+こちらはリダイレクトはせず、 JSON レスポンスを返すだけのシンプルな実装です。
+ミドルウェアがセッションクッキーを削除してくれるため、特別な実装は不要です。
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/routes/auth.ts#L31C1-L53C4
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/backend/src/routes/auth.ts#L31C1-L35C4
 
 ```ts
 authRoutes.post("/logout", async (c, next) => {
-  const body = await c.req.parseBody();
-  const rawReturnTo =
-    typeof body["return_to"] === "string" ? body["return_to"] : null;
+  await logout()(c, next);
 
-  const frontPath = normalizeReturnToPath(rawReturnTo, c.env.FRONT_ORIGIN);
-
-  const internalReturnTo = `/auth/post-logout?return_to=${encodeURIComponent(
-    frontPath
-  )}`;
-
-  return logout({ redirectAfterLogout: internalReturnTo })(c, next);
-});
-
-authRoutes.get("/post-logout", (c) => {
-  const frontPath = normalizeReturnToPath(
-    c.req.query("return_to") || null,
-    c.env.FRONT_ORIGIN
-  );
-
-  const finalUrl = new URL(frontPath, c.env.FRONT_ORIGIN).toString();
-  return c.redirect(finalUrl);
+  return c.json({ success: true });
 });
 ```
 
@@ -840,7 +821,7 @@ authRoutes.get("/post-logout", (c) => {
 
 認証が必須なルートのコード例です。
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/routes/api.ts#L6C1-L10C4
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/backend/src/routes/api.ts#L6C1-L10C4
 
 ```ts
 apiRoutes.get("/me", requiresAuth(), async (c) => {
@@ -869,7 +850,7 @@ https://github.com/auth0/auth0-auth-js/tree/main/packages/auth0-server-js
 
 ### CORS と CSRF 対策
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/backend/src/app.ts#L12C1-L27C6
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/backend/src/app.ts#L12C1-L27C6
 
 ```ts
 // CORSミドルウェア - Cookie を送受信したいので credentials を true にする
@@ -902,7 +883,11 @@ sameSite 属性を "none" にする必要があります。
 
 ### ログイン部分
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/auth.ts#L3C1-L13C2
+ログイン部分のコード例です。
+現在のパスを `return_to` パラメータとして渡し、リダイレクトを行って
+コードフローを開始しています。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/frontend/src/api/auth.ts#L3C1-L13C2
 
 ```ts
 export function login(
@@ -919,36 +904,24 @@ export function login(
 
 ### ログアウト部分
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/auth.ts#L15C1-L33C2
+ログアウト部分のコード例です。
+こちらは単にログアウトルートを呼び出すだけです。
+
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/frontend/src/api/auth.ts#L15C1-L21C2
 
 ```ts
-export function logout(
-  returnTo = window.location.pathname + window.location.search
-): void {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = new URL("/auth/logout", API_BASE).toString();
-
-  const input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "return_to";
-  input.value = returnTo;
-
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
+export async function logout(): Promise<void> {
+  await apiFetch<{ success: boolean }>("/auth/logout", { method: "POST" });
+  return;
 }
 ```
-
-`return_to` パラメータでログアウト後のリダイレクト先を指定しています。
-その後、フォームを動的に生成してログアウトルートに POST リクエストを送信しています。
 
 ### 認証必須ルート呼び出し部分
 
 クッキーが必須な API 呼び出し部分のコード例です。
 `fetch`をラップしたユーティリティ関数を用意すると便利です。
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/client.ts#L17C1-L33C2
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/frontend/src/api/client.ts#L17C1-L33C2
 
 ```ts
 export async function apiFetch<T>(
@@ -972,7 +945,7 @@ export async function apiFetch<T>(
 
 後は認証必須ルートを呼び出すだけです。
 
-https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/d25eee568af24f56a5749a927341265ea39b355b/packages/frontend/src/api/me.ts#L12C1-L21C2
+https://github.com/calloc134/hono-oidc-bff-pattern-example/blob/main/packages/frontend/src/api/me.ts#L12C1-L21C2
 
 ```ts
 export async function me(): Promise<{ user: User } | null> {
