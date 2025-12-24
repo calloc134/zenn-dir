@@ -70,7 +70,6 @@
       - それを含めることが出来る
     - 暗号化の仕組みは以下の通り
       - 対称鍵暗号方式
-    - 今回はあまり深入りしないことに
 - JWK, JWK Set の概要
 
   - JWK = Json Web Key
@@ -80,44 +79,64 @@
     - 複数の JWK をまとめて表現する仕様
   - JWKS URI の概要
 
-- OAuth によるプロフィール API 疑似認証と問題点
-  - プロフィール API の一部分を userinfo/ に切り出し、
-  - 信頼できるユーザ情報については ID トークンで提供する
+## OAuth によるプロフィール API 疑似認証と問題点
 
-- OIDC と OAuth 2.0 の策定の歴史的経緯
-- JWT の関連仕様
-  - Nested JWT
-- OAuth におけるアクセストークン規定の仕様
-  - Bearer によるアクセストークン
-  - JWT アクセストークン
-- クライアント認証の種類
-  - 大きく 3 つに区分
-  - 共有シークレット方式
-    - client_secret_basic (解説済み)
-    - client_secret_jwt
-  - 公開鍵証明書方式
-    - private_key_jwt
-  - クライアント証明書方式
-    - tls_client_auth
-    - self_signed_tls_client_auth
-- OAuth/OIDC における Discovery の仕組み
-- OAuth/OIDC における動的クライアント登録の仕組み
-- sender-constrained token の仕組み
-  - MTLS-bound token
-  - DPoP-bound token
-  - それぞれの特徴と使い分け
-    - MTLS-bound token を利用すると
-    - クライアント認証もこれ一つで済む
-- OIDC における implicit flow/hybrid flow とその安全性評価
-  - nonce パラメータ
-- OIDC におけるログアウトの仕組み
-  - Session Management 1.0
-  - RP-Initiated Logout 1.0
-  - Front-Channel Logout 1.0
-  - Back-Channel Logout 1.0
-- 認可リクエスト・レスポンスの保護
-  - JAR RFC 9101
-  - PAR RFC 9126
-  - JARM RFC
-- 高保証プロファイル FAPI
-  - FAPI 2.0 Security Profile
+- プロフィール API の一部分を userinfo/ に切り出し、
+- 信頼できるユーザ情報については ID トークンで提供する
+
+## OIDC と OAuth 2.0 の策定の歴史的経緯
+
+## JWT の関連仕様
+
+- Nested JWT
+
+## OAuth におけるアクセストークン規定の仕様
+
+- Bearer によるアクセストークン
+- JWT アクセストークン
+
+## クライアント認証の種類
+
+- 大きく 3 つに区分
+- 共有シークレット方式
+  - client_secret_basic (解説済み)
+  - client_secret_jwt
+- 公開鍵証明書方式
+  - private_key_jwt
+- クライアント証明書方式
+  - tls_client_auth
+  - self_signed_tls_client_auth
+
+## OAuth/OIDC における Discovery の仕組み
+
+## OAuth/OIDC における動的クライアント登録の仕組み
+
+## sender-constrained token の仕組み
+
+- MTLS-bound token
+- DPoP-bound token
+- それぞれの特徴と使い分け
+  - MTLS-bound token を利用すると
+  - クライアント認証もこれ一つで済む
+
+## OIDC における implicit flow/hybrid flow とその安全性評価
+
+- nonce パラメータ
+
+## OIDC におけるログアウトの仕組み
+
+- Session Management 1.0
+- RP-Initiated Logout 1.0
+- Front-Channel Logout 1.0
+- Back-Channel Logout 1.0
+
+## 認可リクエスト・レスポンスの保護
+
+- JAR RFC 9101
+- PAR RFC 9126
+- JARM RFC
+-
+
+## 高保証プロファイル FAPI
+
+- FAPI 2.0 Security Profile
