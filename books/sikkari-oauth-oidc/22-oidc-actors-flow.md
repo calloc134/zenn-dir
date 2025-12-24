@@ -121,8 +121,7 @@ GET /authorize
   ?response_type=code
   &client_id=s6BhdRkqt3
   &redirect_uri=https://rp.example.com/callback
-  &scope=openid%20profile
-  &state=xyz123
+  &scope=openid%20profile%20email%20offline_access
 ```
 
 `scope=openid` があることで、これが OIDC のリクエストであることを OP に伝えます。
@@ -137,7 +136,6 @@ GET /authorize
 HTTP/1.1 302 Found
 Location: https://rp.example.com/callback
   ?code=SplxlOBeZQQYbYS6WxSbIA
-  &state=xyz123
 ```
 
 ### ステップ 4：トークンリクエスト

@@ -71,7 +71,7 @@ Location: https://op.example.com/authorize
   ?response_type=code
   &client_id=s6BhdRkqt3
   &redirect_uri=https://rp.example.com/callback
-  &scope=openid%20profile%20email
+  &scope=openid%20profile%20email%20offline_access
   &state=xyz123
   &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
   &code_challenge_method=S256
@@ -90,14 +90,18 @@ Location: https://op.example.com/authorize
 #### スコープについて
 
 OIDC では、`scope` パラメータに **`openid`** を含める必要があります。
-これにより OP はこのリクエストが OIDC のリクエストであることを認識し、ID トークンを発行します。
+これにより OP はこのリクエストが OIDC のリクエストであることを認識し、
+ID トークンを発行します。
 
 ```
 scope=openid profile email
 ```
 
 追加のスコープ（`profile`, `email` など）を指定することで、
-ID トークンや UserInfo Endpoint から追加の情報を取得できます。
+UserInfo Endpoint から追加の情報を取得できます。
+
+また、ここでは`offline_access` スコープを指定しています。
+これにより、OP はリフレッシュトークンも発行するようになります。
 
 ### ステップ 3：OpenID Provider での処理
 
@@ -178,7 +182,7 @@ Content-Type: application/json
   "token_type": "Bearer",
   "expires_in": 3600,
   "refresh_token": "8xLOxBtZp8",
-  "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL29wLmV4YW1wbGUuY29tIiwic3ViIjoidXNlci0xMjM0NSIsImF1ZCI6InM2QmhkUmtxdDMiLCJleHAiOjE3MzUwODQ4MDAsImlhdCI6MTczNTA4MTIwMCwibm9uY2UiOiJuLTBTNl9XekEyTWoifQ.signature..."
+  "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL29wnLmV4YW1wbGUuY29tIiwic3ViIjoidXNlci0xMjM0NSIsImF1ZCI6InM2QmhkUmtxdDMiLCJleHAiOjE3MzUwODQ4MDAsImlhdCI6MTczNTA4MTIwMCwibm9uY2UiOiJuLTBTNl9XekEyTWoifQ.signature..."
 }
 ```
 
@@ -201,6 +205,13 @@ RP は受け取った ID トークンを検証します。
 | `aud` 検証 | 自分の `client_id` が含まれているか確認   |
 | `exp` 検証 | 有効期限が切れていないか確認              |
 | `iat` 検証 | 発行時刻が許容範囲内か確認                |
+
+:::message
+
+`aud`が複数存在している場合、`azp`（Authorized Party）クレームの検証も必要です。
+この実装は応用編で解説するため、省略します。
+
+:::
 
 ##### 署名検証
 
@@ -234,7 +245,8 @@ ID トークンの受信者に、自分の `client_id` が含まれているこ�
 
 ### ステップ 10：ユーザー認証とセッション開始
 
-ID トークンの検証がすべて成功したら、RP はエンドユーザーを認証し、セッションを開始します。
+ID トークンの検証がすべて成功したら、
+RP はエンドユーザーを認証し、セッションを開始します。
 
 ID トークンの `sub` クレームを用いて、ユーザーを一意に識別できます。
 
@@ -267,7 +279,7 @@ OIDC の完全版コードフローを解説しました。
 | PKCE                  | RP（フロー開始時） | OP（トークンリクエスト時）         |
 | state                 | RP（フロー開始時） | RP（認可コード受け取り時）         |
 | クライアント認証      | クライアント登録時 | OP（トークンリクエスト時）         |
-| ID トークン検証       | -                  | RP（トークンレスポンス受け取り時） |
+| ID トークン検証       | ID トークン受取時  | RP（トークンレスポンス受け取り時） |
 
 - **OAuth 2.0 のセキュリティ機構に加え、OIDC 固有の要素が追加**
   - `scope=openid` の指定
