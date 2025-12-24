@@ -18,7 +18,6 @@ OIDC の認可コードフローでは、OAuth 2.0 と同様のセキュリテ�
 | redirect_uri 完全一致 | 認可コード奪取攻撃     | OpenID Provider |
 | PKCE                  | 認可コードすり替え攻撃 | OpenID Provider |
 | state                 | CSRF 攻撃              | Relying Party   |
-| ID トークン検証       | 認証結果の改ざん       | Relying Party   |
 
 ## 完全版フローの流れ
 
@@ -32,12 +31,11 @@ sequenceDiagram
     RP->>RP: code_verifier を生成<br>セッションに保存
     RP->>RP: code_challenge = hash(code_verifier)
     RP->>RP: state を生成<br>セッションに保存
-    RP->>RP: nonce を生成<br>セッションに保存
     RP->>EU: OP にリダイレクト
     EU->>OP: 認可リクエスト（scope=openid）
     OP->>OP: redirect_uri の完全一致を検証
     OP->>OP: エンドユーザーを認証
-    OP->>OP: 認可コード発行<br>code_challenge, nonce と紐付け
+    OP->>OP: 認可コード発行<br>code_challenge と紐付け
     OP->>EU: RP にリダイレクト
     EU->>RP: 認可コード + state
     RP->>RP: セッションから state を取得<br>一致を検証
@@ -48,7 +46,7 @@ sequenceDiagram
     OP->>OP: 認可コードを検証
     OP->>OP: ID トークン + アクセストークンを発行
     OP->>RP: ID トークン + アクセストークン
-    RP->>RP: ID トークンを検証<br>（署名, iss, aud, exp, nonce）
+    RP->>RP: ID トークンを検証<br>（署名, iss, aud, exp）
     RP->>RP: ユーザーを認証、セッション開始
 ```
 
@@ -61,11 +59,7 @@ sequenceDiagram
 1. `code_verifier`（ランダム文字列）を生成し、セッションに保存
 2. `code_verifier` をハッシュ化して `code_challenge` を生成
 3. `state`（ランダム文字列）を生成し、セッションに保存
-4. `nonce`（ランダム文字列）を生成し、セッションに保存
-5. エンドユーザーを OpenID Provider にリダイレクト
-
-OAuth 2.0 との違いとして、OIDC では **`nonce`** を生成・保存します。
-`nonce` は ID トークンの検証時に使用され、リプレイ攻撃への対策となります。
+4. エンドユーザーを OpenID Provider にリダイレクト
 
 ### ステップ 2：認可リクエスト
 
@@ -79,7 +73,6 @@ Location: https://op.example.com/authorize
   &redirect_uri=https://rp.example.com/callback
   &scope=openid%20profile%20email
   &state=xyz123
-  &nonce=n-0S6_WzA2Mj
   &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
   &code_challenge_method=S256
 ```
@@ -91,20 +84,20 @@ Location: https://op.example.com/authorize
 | `redirect_uri`          | リダイレクト先 URI                   |
 | `scope`                 | **`openid` を含める**（OIDC の要件） |
 | `state`                 | CSRF 対策のランダム文字列            |
-| `nonce`                 | **リプレイ攻撃対策のランダム文字列** |
 | `code_challenge`        | PKCE 用のハッシュ値                  |
 | `code_challenge_method` | `S256`（SHA-256 を示す）             |
 
 #### スコープについて
 
 OIDC では、`scope` パラメータに **`openid`** を含める必要があります。
-これにより、OP はこのリクエストが OIDC のリクエストであることを認識し、ID トークンを発行します。
+これにより OP はこのリクエストが OIDC のリクエストであることを認識し、ID トークンを発行します。
 
 ```
 scope=openid profile email
 ```
 
-追加のスコープ（`profile`, `email` など）を指定することで、ID トークンや UserInfo Endpoint から追加の情報を取得できます。
+追加のスコープ（`profile`, `email` など）を指定することで、
+ID トークンや UserInfo Endpoint から追加の情報を取得できます。
 
 ### ステップ 3：OpenID Provider での処理
 
@@ -113,7 +106,7 @@ OpenID Provider は以下を行います。
 1. `redirect_uri` がクライアント登録時のものと完全一致するか検証
 2. エンドユーザーを認証（ログイン画面）
 3. 同意画面を表示
-4. 認可コードを発行し、`code_challenge` および `nonce` と紐付けて保存
+4. 認可コードを発行し、`code_challenge` と紐づけて保存
 
 ### ステップ 4：認可レスポンス
 
@@ -201,14 +194,13 @@ RP は受け取った ID トークンを検証します。
 
 #### 検証項目
 
-| 検証項目     | 説明                                          |
-| ------------ | --------------------------------------------- |
-| 署名検証     | OP の公開鍵を用いて署名が正しいことを確認     |
-| `iss` 検証   | 発行者が期待する OP と一致するか確認          |
-| `aud` 検証   | 自分の `client_id` が含まれているか確認       |
-| `exp` 検証   | 有効期限が切れていないか確認                  |
-| `iat` 検証   | 発行時刻が許容範囲内か確認                    |
-| `nonce` 検証 | セッションに保存した `nonce` と一致するか確認 |
+| 検証項目   | 説明                                      |
+| ---------- | ----------------------------------------- |
+| 署名検証   | OP の公開鍵を用いて署名が正しいことを確認 |
+| `iss` 検証 | 発行者が期待する OP と一致するか確認      |
+| `aud` 検証 | 自分の `client_id` が含まれているか確認   |
+| `exp` 検証 | 有効期限が切れていないか確認              |
+| `iat` 検証 | 発行時刻が許容範囲内か確認                |
 
 ##### 署名検証
 
@@ -239,15 +231,6 @@ ID トークンの受信者に、自分の `client_id` が含まれているこ�
 ```
 
 現在時刻が有効期限を過ぎていないことを確認します。
-
-##### `nonce` 検証
-
-```json
-"nonce": "n-0S6_WzA2Mj"
-```
-
-認可リクエスト時にセッションに保存した `nonce` と、ID トークン内の `nonce` が一致することを確認します。
-これにより、リプレイ攻撃を防止できます。
 
 ### ステップ 10：ユーザー認証とセッション開始
 
@@ -284,13 +267,11 @@ OIDC の完全版コードフローを解説しました。
 | PKCE                  | RP（フロー開始時） | OP（トークンリクエスト時）         |
 | state                 | RP（フロー開始時） | RP（認可コード受け取り時）         |
 | クライアント認証      | クライアント登録時 | OP（トークンリクエスト時）         |
-| nonce                 | RP（フロー開始時） | RP（ID トークン検証時）            |
 | ID トークン検証       | -                  | RP（トークンレスポンス受け取り時） |
 
 - **OAuth 2.0 のセキュリティ機構に加え、OIDC 固有の要素が追加**
   - `scope=openid` の指定
-  - `nonce` パラメータ
   - ID トークンの発行と検証
 - **ID トークンの検証は RP の責務**
-  - 署名、iss、aud、exp、nonce を検証
+  - 署名、iss、aud、exp を検証
 - **検証に成功したら、ユーザーを認証してセッションを開始**
