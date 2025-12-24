@@ -25,3 +25,9 @@ chapters:
   - 18-complete-flow-public
   - 19-implicit-flow
   - 20-oauth-summary
+  - 21-oidc-concepts
+  - 22-oidc-actors-flow
+  - 23-jwt-jws-jwe-overview
+  - 24-jwt-jws-structure
+  - 25-id-token-spec
+  - 26-oidc-complete-flow
