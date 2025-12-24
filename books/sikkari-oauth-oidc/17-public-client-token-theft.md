@@ -15,9 +15,13 @@ title: "認可コードを用いてアクセストークンを不正に取得す
 アクセストークンを不正に取得する攻撃です。
 
 攻撃者が何らかの方法で認可コードを奪取した後、
-Public Client では**クライアント認証がない**ため、攻撃者は簡単にアクセストークンを取得できてしまいます。
+Public Client では**クライアント認証がない**ため、
+攻撃者がクライアント ID を用いてなりすますだけで簡単にアクセストークンを取得できてしまいます。
 
-Confidential Client の場合、認可コードを奪取しても、`client_secret` を知らなければクライアント認証に失敗し、アクセストークンを取得できません。
+![](/images/17-public-client-token-theft/2025-12-24-22-19-58.png)
+
+Confidential Client の場合、認可コードを奪取しても、
+`client_secret` を知らなければクライアント認証に失敗し、アクセストークンを取得できません。
 しかし、Public Client ではこの防御がないため、攻撃が成立してしまいます。
 
 ### 攻撃の流れ
@@ -54,6 +58,8 @@ Public Client では、
 Confidential Client でも PKCE は有効ですが、
 **Public Client では PKCE が更に重要**です。
 フローを用いて簡単に攻撃の流れを見てみましょう。
+
+![](/images/17-public-client-token-theft/2025-12-24-22-27-34.png)
 
 ### PKCE がない場合
 
