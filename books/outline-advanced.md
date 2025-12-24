@@ -123,6 +123,10 @@
 
 - nonce パラメータ
 
+## OIDC におけるセキュリティ機構向上のための拡張仕様
+
+- `sub`の pairwise
+
 ## OIDC におけるログアウトの仕組み
 
 - Session Management 1.0
