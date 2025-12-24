@@ -9,22 +9,30 @@ title: "IDトークンの仕様"
 
 ## ID トークンの構造
 
-ID トークンは、基本的に **JWT（JWS 形式）** で提供されます。
+ID トークンは、一般的には **JWT（JWS 形式）** で提供されます。
 
 > The ID Token is a security token that contains Claims about the Authentication of an End-User by an Authorization Server when using a Client, and potentially other requested Claims. The ID Token is represented as a JSON Web Token (JWT).
 >
 > — [OpenID Connect Core 1.0 Section 2](https://openid.net/specs/openid-connect-core-1_0.html#IDToken)
 
+:::message
+
+「一般的」と表現したのは、ネストされた JWT （Nested JWT）形式を利用する場合もあるためです。
+Nested JWT 形式では、ID トークンが JWE で暗号化され、その中に JWS 形式の JWT が含まれます。
+この形式については応用編で解説するため、省略します。
+
+:::
+
 ### 署名アルゴリズムの要件
 
 ID トークンの署名アルゴリズムには、以下の要件があります。
 
-| アルゴリズム | 推奨/禁止                                          |
-| ------------ | -------------------------------------------------- |
-| RS256        | **推奨**（デフォルト）                             |
-| ES256        | 推奨                                               |
-| `none`       | **原則禁止**                                       |
-| HS256        | 原則禁止（Confidential Client でのみ条件付き許容） |
+| アルゴリズム | 推奨/禁止                                                      |
+| ------------ | -------------------------------------------------------------- |
+| RS256        | **推奨**（デフォルト）                                         |
+| ES256        | 好ましい                                                       |
+| `none`       | **原則禁止**                                                   |
+| HS256        | 特殊な条件を除き禁止（Confidential Client でのみ条件付き許容） |
 
 > ID Tokens MUST be signed using JWS. The algorithm RS256 MUST be supported.
 >
@@ -34,6 +42,7 @@ ID トークンの署名アルゴリズムには、以下の要件がありま�
 
 `alg: none` は署名なしを意味しますが、ID トークンでは **原則として禁止** されています。
 署名がない ID トークンは改ざんを検出できず、セキュリティ上の脆弱性となるためです。
+仕様においては例外もありますが、セキュリティリスクを伴うためここでは詳しく解説しません。
 
 #### HS256 の原則禁止
 
@@ -76,7 +85,9 @@ ID トークンのヘッダ部分は、JWT（JWS 形式）のヘッダ部分と�
 #### `kid` パラメータ
 
 署名検証に使用する鍵を識別するためのヒントです。
-OpenID Provider が複数の鍵を持っている場合、`kid` を使って適切な鍵を選択できます。
+OpenID Provider が複数の公開鍵を持っている場合、
+そのままではどの鍵で署名検証を行うべきか分かりません。
+そのため、鍵の選択のヒントとして `kid` を利用します。
 
 鍵の管理については、応用編の JWK/JWK Set で詳しく解説します。
 
@@ -91,8 +102,7 @@ ID トークンのペイロード部分には、
   "sub": "user-12345",
   "aud": "client-id-abc",
   "exp": 1735084800,
-  "iat": 1735081200,
-  "nonce": "n-0S6_WzA2Mj"
+  "iat": 1735081200
 }
 ```
 
@@ -117,14 +127,35 @@ OpenID Provider ごとに一意な識別子となります。
 "iss": "https://accounts.google.com"
 ```
 
+`iss`の値はクエリやフラグメントを含まない完全な URL である必要があります。
+
 ##### `sub`（Subject）
 
 認証されたユーザーを識別するための識別子です。
 この値は **OP 内で一意** であり、同じユーザーに対しては常に同じ値が返されます。
+ユーザに一対一で対応するという性質上、アプリ側ではこの値を用いてユーザーを識別すると良いでしょう。
 
 ```json
 "sub": "110169484474386276334"
 ```
+
+:::message
+
+`sub`クレームのプライバシーを向上させるため、
+OP はペイロード内の `sub` クレームを
+Relying Party ごとに異なる値にすることができます。
+
+従来の実装では`sub` クレームは同一の値を返すことが一般的です。
+この実装は`public` な`sub` と呼ばれます。
+これに対し、Relying Party ごとに異なる`sub` 値を返す実装は
+`pairwise` な`sub` と呼ばれます。
+
+`pairwise` の場合、同じユーザであっても異なる Relying Party では
+異なる `sub` 値が発行され、ユーザのプライバシーが保護されます。
+
+詳細は応用編で解説します。
+
+:::
 
 ##### `aud`（Audience）
 

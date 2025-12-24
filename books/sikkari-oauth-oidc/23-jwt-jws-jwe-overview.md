@@ -19,6 +19,13 @@ title: "JWTとJWS/JWEの概要"
 >
 > — [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519)
 
+:::message
+
+JWT 仕様では Unsecured JWT（署名も暗号化もされていない JWT）も定義されていますが、
+今回はセキュリティ上の観点から解説を省略します。
+
+:::
+
 ## 一般的に「JWT」と言われて思い浮かべる形
 
 「JWT」と聞いて、多くの人が思い浮かべるのは以下のような形式でしょう。
