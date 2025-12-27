@@ -92,14 +92,14 @@ sequenceDiagram
     participant RP as Relying Party
     participant OP as OpenID Provider
 
-    EU->>RP: ログインしたい
+    EU->>RP: 外部ログインしたい
     RP->>EU: まずは認可コードを取ってきてください
     EU->>OP: 認証してください（scope=openid）
-    OP->>OP: エンドユーザを認証
+    OP->>OP: エンドユーザを認証・ログイン連携の同意
     OP->>OP: 認可コードを発行
     OP->>EU: 認証しました（認可コードを渡す）
     EU->>RP: 認可コードを渡す
-    RP->>OP: 認可コードを持っているので<br>トークンをください
+    RP->>OP: 認可コードを持っているので<br>トークン群をください
     OP->>OP: 認可コードを検証
     OP->>OP: ID トークン + アクセストークンを発行
     OP->>RP: ID トークン + アクセストークン
