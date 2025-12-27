@@ -21,10 +21,22 @@ OIDC では、OAuth 2.0 のロールに対応する形で、以下のロール�
 | 認可サーバー     | OpenID Provider（OP）                |
 | リソースサーバー | UserInfo Endpoint を提供するサーバー |
 
+![](/images/22-oidc-actors-flow/2025-12-27-22-52-25.png)
+
 ### エンドユーザ（End-User）
 
 OAuth 2.0 の **リソースオーナー** に対応します。
-OIDC では、認証の対象となるユーザを指します。
+OIDC では、認証や外部連携の対象となるユーザを指します。
+
+![](/images/22-oidc-actors-flow/2025-12-27-22-57-02.png)
+
+### OpenID Provider（OP）
+
+OAuth 2.0 の **認可サーバー** に対応します。
+エンドユーザを認証し、ID トークンを発行する役割を担います。
+なお、認可サーバの役割も兼ねているため、アクセストークン発行の役割も担います。
+
+![](/images/22-oidc-actors-flow/2025-12-27-23-01-00.png)
 
 ### Relying Party（RP）
 
@@ -34,10 +46,7 @@ OIDC の文脈では ID トークンを受け取って ID 連携を行うアプ�
 OAuth 2.0 のクライアントと同様に
 **Confidential Client** と **Public Client** の区別があります。
 
-### OpenID Provider（OP）
-
-OAuth 2.0 の **認可サーバー** に対応します。
-エンドユーザを認証し、ID トークンを発行する役割を担います。
+![](/images/22-oidc-actors-flow/2025-12-27-23-04-54.png)
 
 ### UserInfo Endpoint
 
