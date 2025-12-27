@@ -1,5 +1,5 @@
 title: "Kawaiiパワーで完全に理解！しっかりやり切るOAuthとOIDC入門 (執筆中)"
-summary: "OAuth/OIDCを背景まで手抜かりなく解説。基本概念、認可フロー、トークンの仕組み、セキュリティ機構など。Kawaiiイラスト満載で楽しく学びましょう！現在OAuthまで執筆。"
+summary: "OAuth/OIDCを背景まで手抜かりなく解説。基本概念、認可フロー、トークンの仕組み、セキュリティ機構など。Kawaiiイラスト満載で楽しく学びましょう！現在OIDC編まで執筆、イラスト制作中。"
 topics: ["OAuth", "OIDC", "認証", "認可", "JWT"]
 published: true
 price: 0 # 有料の場合200〜5000
