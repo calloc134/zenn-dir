@@ -23,7 +23,7 @@ OIDC の認可コードフローでは、OAuth 2.0 と同様のセキュリテ�
 
 ```mermaid
 sequenceDiagram
-    participant EU as エンドユーザー
+    participant EU as エンドユーザ
     participant RP as Relying Party
     participant OP as OpenID Provider
 
@@ -34,7 +34,7 @@ sequenceDiagram
     RP->>EU: OP にリダイレクト
     EU->>OP: 認可リクエスト（scope=openid）
     OP->>OP: redirect_uri の完全一致を検証
-    OP->>OP: エンドユーザーを認証
+    OP->>OP: エンドユーザを認証
     OP->>OP: 認可コード発行<br>code_challenge と紐付け
     OP->>EU: RP にリダイレクト
     EU->>RP: 認可コード + state
@@ -47,23 +47,23 @@ sequenceDiagram
     OP->>OP: ID トークン + アクセストークンを発行
     OP->>RP: ID トークン + アクセストークン
     RP->>RP: ID トークンを検証<br>（署名, iss, aud, exp）
-    RP->>RP: ユーザーを認証、セッション開始
+    RP->>RP: ユーザを認証、セッション開始
 ```
 
 ## 詳細なパラメータ
 
 ### ステップ 1：フロー開始
 
-エンドユーザーが Relying Party にリクエストすると、RP は以下を行います。
+エンドユーザが Relying Party にリクエストすると、RP は以下を行います。
 
 1. `code_verifier`（ランダム文字列）を生成し、セッションに保存
 2. `code_verifier` をハッシュ化して `code_challenge` を生成
 3. `state`（ランダム文字列）を生成し、セッションに保存
-4. エンドユーザーを OpenID Provider にリダイレクト
+4. エンドユーザを OpenID Provider にリダイレクト
 
 ### ステップ 2：認可リクエスト
 
-RP がエンドユーザーをリダイレクトさせる際のレスポンス：
+RP がエンドユーザをリダイレクトさせる際のレスポンス：
 
 ```http
 HTTP/1.1 302 Found
@@ -108,13 +108,13 @@ UserInfo Endpoint から追加の情報を取得できます。
 OpenID Provider は以下を行います。
 
 1. `redirect_uri` がクライアント登録時のものと完全一致するか検証
-2. エンドユーザーを認証（ログイン画面）
+2. エンドユーザを認証（ログイン画面）
 3. 同意画面を表示
 4. 認可コードを発行し、`code_challenge` と紐づけて保存
 
 ### ステップ 4：認可レスポンス
 
-OpenID Provider がエンドユーザーを RP にリダイレクトさせる：
+OpenID Provider がエンドユーザを RP にリダイレクトさせる：
 
 ```http
 HTTP/1.1 302 Found
@@ -243,12 +243,12 @@ ID トークンの受信者に、自分の `client_id` が含まれているこ�
 
 現在時刻が有効期限を過ぎていないことを確認します。
 
-### ステップ 10：ユーザー認証とセッション開始
+### ステップ 10：ユーザ認証とセッション開始
 
 ID トークンの検証がすべて成功したら、
-RP はエンドユーザーを認証し、セッションを開始します。
+RP はエンドユーザを認証し、セッションを開始します。
 
-ID トークンの `sub` クレームを用いて、ユーザーを一意に識別できます。
+ID トークンの `sub` クレームを用いて、ユーザを一意に識別できます。
 
 ## Public Client との差分
 
@@ -286,4 +286,4 @@ OIDC の完全版コードフローを解説しました。
   - ID トークンの発行と検証
 - **ID トークンの検証は RP の責務**
   - 署名、iss、aud、exp を検証
-- **検証に成功したら、ユーザーを認証してセッションを開始**
+- **検証に成功したら、ユーザを認証してセッションを開始**

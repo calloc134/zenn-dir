@@ -16,15 +16,15 @@ OIDC では、OAuth 2.0 のロールに対応する形で、以下のロール�
 
 | OAuth 2.0        | OIDC                                 |
 | ---------------- | ------------------------------------ |
-| リソースオーナー | エンドユーザー                       |
+| リソースオーナー | エンドユーザ                         |
 | クライアント     | Relying Party（RP）                  |
 | 認可サーバー     | OpenID Provider（OP）                |
 | リソースサーバー | UserInfo Endpoint を提供するサーバー |
 
-### エンドユーザー（End-User）
+### エンドユーザ（End-User）
 
 OAuth 2.0 の **リソースオーナー** に対応します。
-OIDC では、認証の対象となるユーザーを指します。
+OIDC では、認証の対象となるユーザを指します。
 
 ### Relying Party（RP）
 
@@ -37,7 +37,7 @@ OAuth 2.0 のクライアントと同様に
 ### OpenID Provider（OP）
 
 OAuth 2.0 の **認可サーバー** に対応します。
-エンドユーザーを認証し、ID トークンを発行する役割を担います。
+エンドユーザを認証し、ID トークンを発行する役割を担います。
 
 ### UserInfo Endpoint
 
@@ -45,7 +45,7 @@ OAuth 2.0 の **リソースサーバー** に対応するのが
 OIDC の **UserInfo Endpoint** を提供するサーバーです。
 
 UserInfo Endpoint は、
-アクセストークンを用いてユーザーのプロフィール情報を取得するためのエンドポイントです。
+アクセストークンを用いてユーザのプロフィール情報を取得するためのエンドポイントです。
 
 > The UserInfo Endpoint is an OAuth 2.0 Protected Resource that returns Claims about the authenticated End-User.
 >
@@ -88,14 +88,14 @@ OIDC の認可コードフローは、**OAuth 2.0 の認可コードフローと
 
 ```mermaid
 sequenceDiagram
-    participant EU as エンドユーザー
+    participant EU as エンドユーザ
     participant RP as Relying Party
     participant OP as OpenID Provider
 
     EU->>RP: ログインしたい
     RP->>EU: まずは認可コードを取ってきてください
     EU->>OP: 認証してください（scope=openid）
-    OP->>OP: エンドユーザーを認証
+    OP->>OP: エンドユーザを認証
     OP->>OP: 認可コードを発行
     OP->>EU: 認証しました（認可コードを渡す）
     EU->>RP: 認可コードを渡す
@@ -104,13 +104,13 @@ sequenceDiagram
     OP->>OP: ID トークン + アクセストークンを発行
     OP->>RP: ID トークン + アクセストークン
     RP->>RP: ID トークンを検証
-    RP->>RP: ユーザーを認証、セッション開始
+    RP->>RP: ユーザを認証、セッション開始
 ```
 
 ### ステップ 1：フロー開始
 
-1. エンドユーザーが Relying Party（RP）に対し「ログインしたい」とリクエストする
-2. RP がエンドユーザーを OpenID Provider（OP）にリダイレクトさせる
+1. エンドユーザが Relying Party（RP）に対し「ログインしたい」とリクエストする
+2. RP がエンドユーザを OpenID Provider（OP）にリダイレクトさせる
 
 ### ステップ 2：認可リクエスト
 
@@ -128,9 +128,9 @@ GET /authorize
 
 ### ステップ 3：認可コード取得
 
-3. エンドユーザーが OP で認証を行う
-4. OP が認可コードを発行し、エンドユーザーを RP にリダイレクトさせる
-5. エンドユーザーが RP に認可コードを渡す
+3. エンドユーザが OP で認証を行う
+4. OP が認可コードを発行し、エンドユーザを RP にリダイレクトさせる
+5. エンドユーザが RP に認可コードを渡す
 
 ```http
 HTTP/1.1 302 Found
@@ -180,7 +180,7 @@ ID トークンの検証方法については、後の章で詳しく解説し�
 ## まとめ
 
 - **OIDC の主要なロールは OAuth 2.0 とほぼ同じ**
-  - リソースオーナー → エンドユーザー
+  - リソースオーナー → エンドユーザ
   - クライアント → Relying Party（RP）
   - 認可サーバー → OpenID Provider（OP）
   - リソースサーバー → UserInfo Endpoint を提供するサーバー
