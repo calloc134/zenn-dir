@@ -92,6 +92,21 @@ sequenceDiagram
 ![](/images/11-token-theft-attack/2025-12-02-16-24-56.png)
 
 :::message
+**実際の PKCE 計算**
+
+PKCE で`S256`メソッドを使用する場合、
+実際に`code_verifier`から`code_challenge`を計算する手順は以下の通りです。
+
+1. `code_verifier`を ASCII エンコードする
+2. SHA-256 でハッシュ化する
+3. Base64 URL エンコードする
+4. パディング文字`=`を削除する
+
+ここでは簡単のために手順を省略していますが、実装の際には注意してください。
+
+:::
+
+:::message
 **ハッシュ化について**
 
 PKCE の仕様では、SHA-256 によるハッシュ化が推奨されています。平文での利用も仕様にありますが、非推奨です。
