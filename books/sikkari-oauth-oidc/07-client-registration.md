@@ -124,16 +124,22 @@ grant_type=authorization_code&code=xxxxx&client_id=xxxxx&client_secret=xxxxx
 
 ## 余談：共有シークレットでの認証のリスク
 
-共有シークレット（`client_secret`）は、
-通信を傍受された場合に漏洩するリスクがあります。
+共有シークレット（`client_secret`）は当然平文の状態で送信されます。
+そのため、トークンリクエストの際の通信を傍受された場合、漏洩のリスクがあります。
 
-そのため、
+![](/images/07-client-registration/2025-12-27-20-34-58.png)
+
+このリスクを軽減するために、OAuth では TLS（Transport Layer Security）を用いた HTTPS 通信が必須となっています。
+また、クライアント認証の強化手段として、
 
 - HMAC を用いた対称鍵署名 JWT (`client_secret_jwt`)
 - 公開鍵暗号を用いた署名 JWT (`private_key_jwt`)
 - mTLS クライアント証明書を用いた認証 (`tls_client_auth`/`self_signed_tls_client_auth`)
 
 など、他のクライアント認証方式も存在します。
+
+![](/images/07-client-registration/2025-12-27-20-49-06.png)
+
 これらのクライアント認証方式については、応用編で解説します。
 
 ## 余談：Public Client の場合
@@ -141,5 +147,3 @@ grant_type=authorization_code&code=xxxxx&client_id=xxxxx&client_secret=xxxxx
 Public Client では、`client_secret` を安全に保管できないため、クライアント認証を行いません。
 
 Public Client の場合のセキュリティ対策については、後の章で解説します。
-
-![](/images/07-client-registration/2025-12-02-15-34-59.png)
