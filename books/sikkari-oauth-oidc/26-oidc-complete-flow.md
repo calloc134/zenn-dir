@@ -34,7 +34,7 @@ sequenceDiagram
     RP->>EU: OP にリダイレクト
     EU->>OP: 認可リクエスト（scope=openid）
     OP->>OP: redirect_uri の完全一致を検証
-    OP->>OP: エンドユーザを認証
+    OP->>OP: エンドユーザを認証<br>ログイン連携同意
     OP->>OP: 認可コード発行<br>code_challenge と紐付け
     OP->>EU: RP にリダイレクト
     EU->>RP: 認可コード + state
