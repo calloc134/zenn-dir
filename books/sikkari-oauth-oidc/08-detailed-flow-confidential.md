@@ -158,6 +158,8 @@ OAuth 2.0 の仕様では必須となっていますが、より近年の仕様�
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
+Cache-Control: no-store
+Pragma: no-cache
 
 {
   "access_token": "2YotnFZFEjr1zCsicMWpAA",

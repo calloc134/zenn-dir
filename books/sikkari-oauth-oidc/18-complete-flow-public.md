@@ -121,6 +121,8 @@ Confidential Client と同じです。
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
+Cache-Control: no-store
+Pragma: no-cache
 
 {
   "access_token": "2YotnFZFEjr1zCsicMWpAA",
