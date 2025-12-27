@@ -176,6 +176,8 @@ OpenID Provider は以下を検証します。
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
+Cache-Control: no-store
+Pragma: no-cache
 
 {
   "access_token": "SlAV32hkKG",

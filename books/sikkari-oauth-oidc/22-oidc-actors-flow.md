@@ -160,6 +160,8 @@ OAuth 2.0 との違いとして、レスポンスに **ID トークン** が含�
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
+Cache-Control: no-store
+Pragma: no-cache
 
 {
   "access_token": "SlAV32hkKG",
