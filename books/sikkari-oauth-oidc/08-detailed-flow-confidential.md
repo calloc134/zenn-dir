@@ -23,8 +23,7 @@ sequenceDiagram
     C->>RO: 認可サーバにリダイレクト
     Note right of C: response_type=code<br>client_id=xxx<br>redirect_uri=xxx<br>scope=xxx
     RO->>AS: 認可リクエスト
-    AS->>AS: リソースオーナーを認証
-    AS->>AS: 同意画面を表示
+    AS->>AS: リソースオーナーを認証<br>リソース認可同意
     AS->>AS: 認可コードを発行
     AS->>RO: クライアントにリダイレクト
     Note left of AS: code=xxx

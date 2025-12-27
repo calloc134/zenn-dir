@@ -31,7 +31,7 @@ sequenceDiagram
     C->>RO: 認可サーバにリダイレクト
     RO->>AS: 認可リクエスト
     AS->>AS: redirect_uri の完全一致を検証
-    AS->>AS: リソースオーナーを認証
+    AS->>AS: リソースオーナーを認証<br>リソース認可同意
     AS->>AS: 認可コード発行<br>code_challenge と紐付け
     AS->>RO: クライアントにリダイレクト
     RO->>C: 認可コード + state
