@@ -60,6 +60,8 @@ UserInfo Endpoint は、
 >
 > — [OpenID Connect Core 1.0 Section 5.3](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo)
 
+![](/images/22-oidc-actors-flow/2025-12-28-14-57-38.png)
+
 UserInfo Endpoint は **認可の対象となるリソース** であることを意識しましょう。
 OIDC においても OAuth 2.0 の認可の仕組みがそのまま活用されている部分であると言えます。
 
@@ -78,6 +80,8 @@ OIDC は OAuth 2.0 を拡張した仕様ですが、
 | ----------------- | ---------------------------------------------------------- |
 | ID トークン       | OIDC で追加された **ID 連携** の特性が強い                 |
 | UserInfo Endpoint | OAuth 2.0 の機構を引き継いだ **リソース認可** の特性が強い |
+
+![](/images/22-oidc-actors-flow/2025-12-28-15-03-37.png)
 
 ID トークンは OIDC 固有の仕組みで、ID 連携を実現するためのものです。
 一方 UserInfo Endpoint へのアクセスは
@@ -121,12 +125,26 @@ sequenceDiagram
 
 ### ステップ 1：フロー開始
 
-1. エンドユーザが Relying Party（RP）に対し「ログインしたい」とリクエストする
-2. RP がエンドユーザを OpenID Provider（OP）にリダイレクトさせる
+1. エンドユーザが Relying Party（RP）に対し
+   「外部ログインしたい」とリクエストする
+2. RP がエンドユーザに対し
+   「まずは認可コードを取ってきてください」と応答し、
+   OpenID Provider（OP）にリダイレクトさせる
 
-### ステップ 2：認可リクエスト
+![](/images/22-oidc-actors-flow/2025-12-28-15-08-43.png)
 
-OAuth 2.0 との違いとして、スコープに `openid` を含める必要があります。
+### ステップ 2：認可コード取得
+
+3. エンドユーザが OP にアクセスし、「認証してください」とリクエストする
+4. OP がエンドユーザを認証し、ログイン連携同意を得て認可コードを発行する
+5. OP がエンドユーザに認可コードを持たせ、RP にリダイレクトさせる
+6. エンドユーザは RP に対して認可コードを渡す
+
+![](/images/22-oidc-actors-flow/2025-12-28-15-17-44.png)
+
+認可リクエストでは、スコープに `openid` を含める必要があります。
+スコープに`openid` を含めることで、
+OIDC のリクエストであり、ID トークンの発行を要求していることを OP に伝えます。
 
 ```http
 GET /authorize
@@ -136,13 +154,7 @@ GET /authorize
   &scope=openid%20profile%20email%20offline_access
 ```
 
-`scope=openid` があることで、これが OIDC のリクエストであることを OP に伝えます。
-
-### ステップ 3：認可コード取得
-
-3. エンドユーザが OP で認証を行う
-4. OP が認可コードを発行し、エンドユーザを RP にリダイレクトさせる
-5. エンドユーザが RP に認可コードを渡す
+認可コードのレスポンスは OAuth 2.0 と同様です。
 
 ```http
 HTTP/1.1 302 Found
@@ -150,9 +162,16 @@ Location: https://rp.example.com/callback
   ?code=SplxlOBeZQQYbYS6WxSbIA
 ```
 
-### ステップ 4：トークンリクエスト
+### ステップ 3: ID トークン・アクセストークン取得
 
-6. RP が認可コードを OP に送信し、トークンを要求する
+7. RP が認可コードを 持って OP にアクセスし、
+   「ID トークン(+アクセストークン)をください」とリクエストする
+8. OP が認可コードを検証し、成功すれば ID トークンとアクセストークンを発行する
+9. OP が RP に対して ID トークンとアクセストークンを返す
+
+![](/images/22-oidc-actors-flow/2025-12-28-15-22-16.png)
+
+トークンリクエストは OAuth 2.0 とほぼ同じです。
 
 ```http
 POST /token HTTP/1.1
@@ -165,9 +184,8 @@ grant_type=authorization_code
 &redirect_uri=https://rp.example.com/callback
 ```
 
-### ステップ 5：トークンレスポンス
-
-OAuth 2.0 との違いとして、レスポンスに **ID トークン** が含まれます。
+トークンレスポンスでは、OAuth 2.0 のアクセストークンに加えて、
+レスポンスに **ID トークン** が含まれます。
 
 ```http
 HTTP/1.1 200 OK
@@ -184,7 +202,7 @@ Pragma: no-cache
 }
 ```
 
-### ステップ 6：ID トークンの検証とログイン完了
+### ステップ 4：ID トークンの検証とログイン完了
 
 7. RP が ID トークンを検証する
 8. 検証に成功したら、外部ユーザの連携・ログインを完了し、セッションを開始する
