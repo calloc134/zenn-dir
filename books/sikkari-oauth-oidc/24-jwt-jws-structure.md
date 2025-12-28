@@ -1,5 +1,6 @@
 ---
 title: "JWT（JWS形式）の詳しい構造"
+free: true
 ---
 
 ## 概要

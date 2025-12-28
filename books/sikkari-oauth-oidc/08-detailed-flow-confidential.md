@@ -1,5 +1,6 @@
 ---
 title: "ここまでの詳細フロー解説（Confidential Client）"
+free: true
 ---
 
 ## 概要

@@ -1,5 +1,6 @@
 ---
 title: "認可コードを押し付ける攻撃（CSRF）と防御 (state)"
+free: true
 ---
 
 ## 概要

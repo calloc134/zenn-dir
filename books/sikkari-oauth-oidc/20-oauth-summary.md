@@ -1,5 +1,6 @@
 ---
 title: "OAuthまとめとOAuth 2.1の紹介"
+free: true
 ---
 
 ## OAuth まとめ

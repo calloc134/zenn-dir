@@ -1,5 +1,6 @@
 ---
 title: "ここまでの完全版コードフロー解説（Confidential Client）"
+free: true
 ---
 
 ## 概要

@@ -1,5 +1,6 @@
 ---
 title: "OAuthの登場人物"
+free: true
 ---
 
 ## 概要

@@ -1,5 +1,6 @@
 ---
 title: "OAuthとOIDCの概要と目的の違い"
+free: true
 ---
 
 ## OAuth とは
