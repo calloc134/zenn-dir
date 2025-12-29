@@ -165,6 +165,16 @@ OAuth 2.0 では、`client_secret_basic` が MUST、
 したがって OAuth 2.1 では`client_secret_basic` は MAY サポートとなり、
 逆に`client_secret_post` が MUST サポートとなりました。
 
+:::message
+
+ただし、仕様策定側の本音としては、
+`private_key_jwt` や `tls_client_auth` といった
+より安全なクライアント認証方式を推奨したいという意図があると思われます。
+
+これらのより安全な認証方式については、応用編で解説します。
+
+:::
+
 ### 認可コード時の redirect_uri 完全一致検証の必須化
 
 OAuth 2.0 では、redirect_uri の検証は「登録済みの URI と**一致するか**」を確認することが推奨されていました。
