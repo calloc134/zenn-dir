@@ -114,11 +114,6 @@ OAuth 2.0 では、`client_secret_post` は非推奨の扱いになっていま�
 そのため、当初は `client_secret_basic` を推奨する、という形で解説を行っていました。
 
 しかし、OAuth 2.1 ではこの方針が反転し、`client_secret_post` が推奨される形になりました。
-理由としては、`client_secret_basic` は HTTP ヘッダに認証情報を含めるため、
-エンコード方式の違いなどにより、運用に問題が発生するケースがあったためです。
-
-したがって OAuth 2.1 では`client_secret_basic` は MAY サポートとなり、
-逆に`client_secret_post` が MUST サポートとなりました。
 
 この詳細については、OAuth 2.1 の章で改めて解説します。
 
