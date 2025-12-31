@@ -94,10 +94,12 @@ Handle 式 アクセストークン を利用する場合、そのままだと�
 ### Token Introspection エンドポイント
 
 OAuth 2.0 Token Introspection エンドポイントは、
-[RFC 7662](https://www.rfc-editor.org/rfc/rfc7662) で定義されています。
+RFC 7662 で定義されています。[^rfc7662-introspection]
 
 リソースサーバはこのエンドポイントに対してアクセストークンの情報を問い合わせ、
 その情報を元にトークンの有効性とメタデータを検証します。
+
+[^rfc7662-introspection]: RFC 7662 は OAuth 2.0 Token Introspection の仕様で、リソースサーバが認可サーバにトークン情報を問い合わせるためのエンドポイントを定義しています。https://www.rfc-editor.org/rfc/rfc7662.html
 
 ### アクセストークンの有効性検証
 
@@ -148,7 +150,9 @@ Assertion 式 アクセストークン は、リソースサーバがトーク�
 代表的な形式として JWT 形式のアクセストークンがあります。
 
 JWT 形式の アクセストークン 仕様は
-[RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) で定義されています。
+RFC 9068 で定義されています。[^rfc9068-jwt-at]
+
+[^rfc9068-jwt-at]: RFC 9068 は JWT 形式のアクセストークンの仕様で、トークンに含めるべきクレームや検証方法が定義されています。https://www.rfc-editor.org/rfc/rfc9068.html
 
 :::message
 

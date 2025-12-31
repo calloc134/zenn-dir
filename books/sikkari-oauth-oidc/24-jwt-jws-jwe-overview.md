@@ -14,11 +14,9 @@ free: true
 ## JWT 自体の仕様
 
 **JWT（JSON Web Token）** は、
-データを JSON 形式で表現し、署名や暗号化で保護してコンパクトに表現するための仕様です。
+データを JSON 形式で表現し、署名や暗号化で保護してコンパクトに表現するための仕様です。[^rfc7519-jwt]
 
-> JSON Web Token (JWT) is a compact, URL-safe means of representing claims to be transferred between two parties.
->
-> — [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519)
+[^rfc7519-jwt]: RFC 7519 において JWT は「2 者間で転送されるクレームを表現するためのコンパクトで URL セーフな手段」と定義されています。https://www.rfc-editor.org/rfc/rfc7519.html
 
 :::message
 
@@ -50,11 +48,9 @@ JWT の厳密な定義を理解するために、まずは JWS と JWE につい
 
 ### JWS（JSON Web Signature）
 
-**JWS** は、データに対して **整合性保護（Integrity Protection）** の仕組みを提供する仕様です。
+**JWS** は、データに対して **整合性保護（Integrity Protection）** の仕組みを提供する仕様です。[^rfc7515-jws]
 
-> JSON Web Signature (JWS) represents content secured with digital signatures or Message Authentication Codes (MACs) using JSON-based data structures.
->
-> — [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515)
+[^rfc7515-jws]: RFC 7515 (JSON Web Signature) は、JSON ベースのデータ構造を用いてデジタル署名または MAC で保護されたコンテンツを表現する仕様です。https://www.rfc-editor.org/rfc/rfc7515.html
 
 一般的に「JWT」と言われて目にするのは、ほとんどがこの JWS 形式です。
 

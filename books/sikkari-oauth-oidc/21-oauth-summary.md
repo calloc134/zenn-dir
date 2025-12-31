@@ -105,10 +105,12 @@ OAuth 2.0 は、本体である RFC6749 以外にも多数の拡張仕様が存�
 
 ### PKCE の必須化
 
-OAuth 2.0 では PKCE は拡張仕様（RFC 7636）でしたが、OAuth 2.1 では**必須**となりました。
+OAuth 2.0 では PKCE は拡張仕様（RFC 7636）でしたが、OAuth 2.1 では**必須**となりました。[^rfc9700-pkce-required]
 
 つまり、Confidential / Public を問わず、すべてのクライアントで PKCE を実装する必要があります。
 これにより、すべてのクライアントで認可コードすり替え攻撃を防止できるようになります。
+
+[^rfc9700-pkce-required]: RFC 9700 Section 2.1.1 において、すべてのクライアントは PKCE を使用すべきであると規定されています。https://www.rfc-editor.org/rfc/rfc9700.html#section-2.1.1
 
 ### インプリシットフローの削除
 

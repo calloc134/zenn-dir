@@ -168,7 +168,9 @@ JavaScript からクロスオリジンのトークンエンドポイントに直
 
 > The implicit grant (response type "token") MUST NOT be used.
 
-インプリシットフローは使用してはならない、と明記されています。
+インプリシットフローは使用してはならない、と明記されています。[^rfc9700-implicit]
+
+[^rfc9700-implicit]: RFC 9700 (OAuth 2.0 Security Best Current Practice) Section 2.1.2 において、インプリシットグラントの使用禁止が明記されています。https://www.rfc-editor.org/rfc/rfc9700.html#section-2.1.2
 
 ### OAuth 2.1
 

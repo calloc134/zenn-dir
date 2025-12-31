@@ -66,6 +66,10 @@ Location: https://authorization-server.example.com/oauth2/authorize
 | `redirect_uri`  | 認可コードを受け取るリダイレクト先         |
 | `scope`         | リソースへのアクセス範囲（スペース区切り） |
 
+これらのパラメータは RFC 6749 において定義されています。[^rfc6749-auth-request]
+
+[^rfc6749-auth-request]: RFC 6749 Section 4.1.1 において、認可コードフローの認可リクエストのパラメータが定義されています。https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1.1
+
 ## ステップ 2：認可コード取得
 
 ### 2-1. リソースオーナーが認可サーバにアクセス

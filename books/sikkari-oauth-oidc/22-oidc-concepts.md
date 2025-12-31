@@ -14,11 +14,9 @@ OIDC がどのように OAuth 2.0 を拡張しているのかを見ていきま�
 ## OAuth 2.0 と OIDC の関係性（復習）
 
 [前章まで](/calloc134/books/sikkari-oauth-oidc/viewer/21-oauth-summary)で学んだ通り、OAuth 2.0 は**認可**のためのフレームワークです。
-一方、OIDC は **OAuth 2.0 の上に載るアイデンティティレイヤー** として定義されています。
+一方、OIDC は **OAuth 2.0 の上に載るアイデンティティレイヤー** として定義されています。[^oidc-core-intro]
 
-> OpenID Connect 1.0 is a simple identity layer on top of the OAuth 2.0 protocol.
->
-> — [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
+[^oidc-core-intro]: OpenID Connect Core 1.0 の Introduction において、OIDC は「OAuth 2.0 プロトコルの上に載るシンプルなアイデンティティレイヤー」と説明されています。https://openid.net/specs/openid-connect-core-1_0.html#Introduction
 
 両者の目的は異なりますが、技術的には密接に繋がっています。
 

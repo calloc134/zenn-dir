@@ -55,11 +55,9 @@ OAuth 2.0 の **リソースサーバー** に対応するのが
 OIDC の **UserInfo Endpoint** を提供するサーバーです。
 
 UserInfo Endpoint は、
-アクセストークンを用いてユーザのプロフィール情報を取得するためのエンドポイントです。
+アクセストークンを用いてユーザのプロフィール情報を取得するためのエンドポイントです。[^oidc-userinfo]
 
-> The UserInfo Endpoint is an OAuth 2.0 Protected Resource that returns Claims about the authenticated End-User.
->
-> — [OpenID Connect Core 1.0 Section 5.3](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo)
+[^oidc-userinfo]: OpenID Connect Core 1.0 Section 5.3 において、UserInfo Endpoint は「OAuth 2.0 で保護されたリソースであり、認証されたエンドユーザに関するクレームを返す」と定義されています。https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
 
 ![](/images/22-oidc-actors-flow/2025-12-28-14-57-38.png)
 

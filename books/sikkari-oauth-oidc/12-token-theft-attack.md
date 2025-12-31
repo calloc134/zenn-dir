@@ -65,10 +65,12 @@ sequenceDiagram
 
 ![](/images/11-token-theft-attack/2025-12-02-19-13-39.png)
 
-[RFC 7636](https://www.rfc-editor.org/rfc/rfc7636) で定義された仕組みです。
+PKCE は RFC 7636 で定義された仕組みです。[^rfc7636-pkce]
 検証する主体は **認可サーバ** であることに留意してください。
 
 ![](/images/11-token-theft-attack/2025-12-02-16-12-58.png)
+
+[^rfc7636-pkce]: RFC 7636 (PKCE - Proof Key for Code Exchange) は、認可コードの横取り攻撃を防止するための仕様で、code_verifier と code_challenge を用いた検証方法を定義しています。https://www.rfc-editor.org/rfc/rfc7636.html
 
 #### PKCE の仕組み
 

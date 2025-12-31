@@ -10,12 +10,14 @@ free: true
 
 ## Confidential Client と Public Client の違い
 
-RFC 6749 では、クライアントを以下の 2 種類に分類しています。
+RFC 6749 では、クライアントを以下の 2 種類に分類しています。[^rfc6749-client-types-detail]
 
 | クライアントタイプ      | 説明                                                       |
 | ----------------------- | ---------------------------------------------------------- |
 | **Confidential Client** | クレデンシャルの機密性を維持することができるクライアント   |
 | **Public Client**       | クレデンシャルの機密性を維持することができないクライアント |
+
+[^rfc6749-client-types-detail]: RFC 6749 Section 2.1 において、Confidential Client は「クライアントクレデンシャルの機密性を維持できるクライアント」、Public Client は「クレデンシャルの機密性を維持できないクライアント」と定義されています。https://www.rfc-editor.org/rfc/rfc6749.html#section-2.1
 
 ### 本来の定義
 

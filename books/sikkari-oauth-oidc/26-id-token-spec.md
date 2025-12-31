@@ -10,11 +10,9 @@ free: true
 
 ## ID トークンの構造
 
-ID トークンは、一般的には **JWT（JWS 形式）** で提供されます。
+ID トークンは、一般的には **JWT（JWS 形式）** で提供されます。[^oidc-id-token]
 
-> The ID Token is a security token that contains Claims about the Authentication of an End-User by an Authorization Server when using a Client, and potentially other requested Claims. The ID Token is represented as a JSON Web Token (JWT).
->
-> — [OpenID Connect Core 1.0 Section 2](https://openid.net/specs/openid-connect-core-1_0.html#IDToken)
+[^oidc-id-token]: OpenID Connect Core 1.0 Section 2 において、ID トークンは「認可サーバによるエンドユーザの認証に関するクレームを含むセキュリティトークンであり、JWT として表現される」と定義されています。https://openid.net/specs/openid-connect-core-1_0.html#IDToken
 
 :::message
 
@@ -35,9 +33,9 @@ ID トークンの署名アルゴリズムには、以下の要件がありま�
 | `none`       | **原則禁止**                                                   |
 | HS256        | 特殊な条件を除き禁止（Confidential Client でのみ条件付き許容） |
 
-> ID Tokens MUST be signed using JWS. The algorithm RS256 MUST be supported.
->
-> — [OpenID Connect Core 1.0 Section 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation)
+ID トークンは JWS を用いて署名され、RS256 アルゴリズムのサポートが必須とされています。[^oidc-id-token-validation]
+
+[^oidc-id-token-validation]: OpenID Connect Core 1.0 Section 3.1.3.7 において「ID トークンは JWS を用いて署名されなければならない。RS256 アルゴリズムはサポート必須である」と規定されています。https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
 
 #### `none` アルゴリズムの禁止
 

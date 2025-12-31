@@ -92,7 +92,7 @@ JWT では、ペイロードに含まれる JSON 形式のデータを
 }
 ```
 
-JWT の仕様（RFC 7519）では、以下の **登録済みクレーム**（Registered Claims）が定義されています。
+JWT の仕様（RFC 7519）では、以下の **登録済みクレーム**（Registered Claims）が定義されています。[^rfc7519-claims]
 
 | クレーム | 名称            | 説明                                  |
 | -------- | --------------- | ------------------------------------- |
@@ -103,6 +103,8 @@ JWT の仕様（RFC 7519）では、以下の **登録済みクレーム**（Reg
 | `nbf`    | Not Before      | JWT が有効になる日時                  |
 | `iat`    | Issued At       | JWT の発行日時                        |
 | `jti`    | JWT ID          | JWT の一意識別子                      |
+
+[^rfc7519-claims]: RFC 7519 Section 4.1 において、JWT の登録済みクレーム（iss, sub, aud, exp, nbf, iat, jti）が定義されています。https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1
 
 パラメータの中で必須なものは存在しませんが、
 もしパラメータが含まれる場合は

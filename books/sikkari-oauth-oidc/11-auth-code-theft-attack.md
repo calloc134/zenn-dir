@@ -72,7 +72,7 @@ sequenceDiagram
 :::message alert
 **完全一致が重要**
 
-前方一致や部分一致ではなく、**完全一致**である必要があります。
+前方一致や部分一致ではなく、**完全一致**である必要があります。[^rfc9700-redirect-uri]
 
 例えば、`https://client.example.com/callback` が登録されている場合：
 
@@ -83,6 +83,8 @@ sequenceDiagram
 
 解釈の余地のある部分を排除することで、悪用を防止します。
 :::
+
+[^rfc9700-redirect-uri]: RFC 9700 (OAuth 2.0 Security Best Current Practice) Section 4.1.3 において、redirect_uri の完全一致検証が必須とされています。https://www.rfc-editor.org/rfc/rfc9700.html#section-4.1.3
 
 ![](/images/10-auth-code-theft-attack/2025-12-02-15-53-32.png)
 

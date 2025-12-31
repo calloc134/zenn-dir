@@ -22,9 +22,11 @@ OAuth には、クライアント認証、およびクライアント登録の�
 
 ## クライアント認証の手法の種類
 
-クライアント認証には、セキュリティレベルによって様々な手法があります。
+クライアント認証には、セキュリティレベルによって様々な手法があります。[^rfc6749-client-auth]
 ここでは一番シンプルで一般的な、
 **共有シークレットを用いた `client_secret_basic`** 方式を解説します。
+
+[^rfc6749-client-auth]: RFC 6749 Section 2.3 ではクライアント認証の方式として、HTTP Basic 認証を利用したクライアントパスワード認証が定義されています。https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3
 
 ## クライアント登録の流れ
 
@@ -32,8 +34,10 @@ OAuth のベースとなる仕様では、クライアント登録の具体的�
 一般的には、クライアントアプリケーションの開発者が認可サーバのダッシュボード画面などから登録を行います。
 
 :::message
-RFC 7591 / RFC 7592 では、OAuth 2.0 Dynamic Client Registration という仕様でクライアント登録の API が定義されていますが、必須ではありません。
+RFC 7591 / RFC 7592 では、OAuth 2.0 Dynamic Client Registration という仕様でクライアント登録の API が定義されていますが、必須ではありません。[^rfc7591-dcr]
 :::
+
+[^rfc7591-dcr]: RFC 7591 は OAuth 2.0 Dynamic Client Registration Protocol の仕様で、プログラムによるクライアント登録の方法を定義しています。https://www.rfc-editor.org/rfc/rfc7591.html
 
 ### 登録時に必要な情報
 

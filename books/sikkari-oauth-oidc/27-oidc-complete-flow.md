@@ -193,11 +193,9 @@ OAuth 2.0 との違いとして、レスポンスに **`id_token`** が含まれ
 
 ### ステップ 9：ID トークンの検証
 
-RP は受け取った ID トークンを検証します。
+RP は受け取った ID トークンを検証します。[^oidc-token-validation]
 
-> The Client MUST validate the ID Token in the Token Response.
->
-> — [OpenID Connect Core 1.0 Section 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation)
+[^oidc-token-validation]: OpenID Connect Core 1.0 Section 3.1.3.7 において、トークンレスポンス内の ID トークンをクライアントが検証する必要があると規定されています。https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
 
 #### 検証項目
 
