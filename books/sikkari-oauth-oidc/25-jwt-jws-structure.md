@@ -5,7 +5,7 @@ free: true
 
 ## 概要
 
-前章で説明した **JWS Compact Serialization 形式の JWT** について、詳しい構造を解説します。
+[前章](/calloc134/books/sikkari-oauth-oidc/viewer/24-jwt-jws-jwe-overview)で説明した **JWS Compact Serialization 形式の JWT** について、詳しい構造を解説します。
 この形式は OIDC の ID トークンで使用されるため、しっかり理解しておきましょう。
 
 ## JWS 形式 JWT の構造
