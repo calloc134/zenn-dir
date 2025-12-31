@@ -6,7 +6,7 @@ free: true
 ## 概要
 
 この章では、OIDC の **ID トークンの仕様** について解説します。
-[前章まで](/calloc134/books/sikkari-oauth-oidc/viewer/25-jwt-jws-structure)で学んだ JWT/JWS の知識を前提として、ID トークン固有の要件を見ていきましょう。
+前章 [25 章 JWT（JWS 形式）の詳しい構造](/calloc134/books/sikkari-oauth-oidc/viewer/25-jwt-jws-structure)で学んだ JWT/JWS の知識を前提として、ID トークン固有の要件を見ていきましょう。
 
 ## ID トークンの構造
 
@@ -206,7 +206,7 @@ ID トークンが発行された時刻を示す Unix タイムスタンプで�
 ## 署名部分
 
 署名部分は、JWT（JWS 形式）の署名部分と同様の構造です。
-署名の計算方法は[前章](/calloc134/books/sikkari-oauth-oidc/viewer/25-jwt-jws-structure)で説明した通りです。
+署名の計算方法は前章 [25 章 JWT（JWS 形式）の詳しい構造](/calloc134/books/sikkari-oauth-oidc/viewer/25-jwt-jws-structure)で説明した通りです。
 
 RP は、OP が公開する **公開鍵** を用いて署名を検証します。
 
