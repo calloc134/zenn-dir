@@ -11,23 +11,24 @@ chapters:
   - 04-oauth-actors
   - 05-auth-code-flow-simple
   - 06-access-token-format
-  - 07-client-registration
-  - 08-detailed-flow-confidential
-  - 09-oauth-attacks-overview
-  - 10-auth-code-theft-attack
-  - 11-token-theft-attack
-  - 12-csrf-attack
-  - 13-complete-flow-confidential
-  - 14-refresh-token
-  - 15-client-types
-  - 16-public-client-code-theft
-  - 17-public-client-token-theft
-  - 18-complete-flow-public
-  - 19-implicit-flow
-  - 20-oauth-summary
-  - 21-oidc-concepts
-  - 22-oidc-actors-flow
-  - 23-jwt-jws-jwe-overview
-  - 24-jwt-jws-structure
-  - 25-id-token-spec
-  - 26-oidc-complete-flow
+  - 07-access-token-validation
+  - 08-client-registration
+  - 09-detailed-flow-confidential
+  - 10-oauth-attacks-overview
+  - 11-auth-code-theft-attack
+  - 12-token-theft-attack
+  - 13-csrf-attack
+  - 14-complete-flow-confidential
+  - 15-refresh-token
+  - 16-client-types
+  - 17-public-client-code-theft
+  - 18-public-client-token-theft
+  - 19-complete-flow-public
+  - 20-implicit-flow
+  - 21-oauth-summary
+  - 22-oidc-concepts
+  - 23-oidc-actors-flow
+  - 24-jwt-jws-jwe-overview
+  - 25-jwt-jws-structure
+  - 26-id-token-spec
+  - 27-oidc-complete-flow
