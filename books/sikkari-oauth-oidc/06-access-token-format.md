@@ -51,7 +51,7 @@ eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwic2NvcGUiOiJyZWF
 
 :::message
 
-JWT の詳細については後ほど詳しく解説します。
+JWT の詳細については [24 章 JWT と JWS/JWE の概要](/calloc134/books/sikkari-oauth-oidc/viewer/24-jwt-jws-jwe-overview) で詳しく解説します。
 
 :::
 
@@ -139,7 +139,7 @@ Handle 式の場合はこれらの情報が認可サーバのデータベース�
 リソースサーバはアクセストークンを受け取ったときにこの値を検証し、
 信頼できる認可サーバから発行されたトークンかどうかを確認できます。
 
-詳細な検証方法については、次の章で解説します。
+詳細な検証方法については、[7 章 アクセストークンの検証手順](/calloc134/books/sikkari-oauth-oidc/viewer/07-access-token-validation) で解説します。
 
 #### `audience`（受信者）
 
@@ -155,7 +155,7 @@ Handle 式の場合はこれらの情報が認可サーバのデータベース�
 リソースサーバはアクセストークンを受け取ったときにこの値を検証し、
 他のリソースサーバ向けに発行されたトークンの誤用を防ぐことができます。
 
-これも詳細については次の章で解説します。
+これも詳細については [7 章 アクセストークンの検証手順](/calloc134/books/sikkari-oauth-oidc/viewer/07-access-token-validation) で解説します。
 
 #### `scope`（スコープ）
 
@@ -170,7 +170,7 @@ Handle 式の場合はこれらの情報が認可サーバのデータベース�
 
 例えば、`read` スコープのみを持つトークンでは読み取り操作のみが許可され、
 書き込み操作は拒否されます。
-スコープの詳細な仕組みについては、次の章で解説します。
+スコープの詳細な仕組みについては、[7 章 アクセストークンの検証手順](/calloc134/books/sikkari-oauth-oidc/viewer/07-access-token-validation) で解説します。
 
 #### `exp`（有効期限）
 
@@ -203,7 +203,7 @@ Handle 式の場合はこれらの情報が認可サーバのデータベース�
 #### `client_id`（クライアント識別子）
 
 `client_id` は、トークンを要求したクライアント（アプリケーション）を識別するための値です。
-クライアント ID については後述します。
+クライアント ID については [8 章 クライアント登録と認証](/calloc134/books/sikkari-oauth-oidc/viewer/08-client-registration) で解説します。
 
 ```json
 {
