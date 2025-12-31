@@ -55,16 +55,34 @@ OAuth 2.0 ではアクセストークンの形式が定義されていないた�
 リソースサーバは、アクセストークンに含まれる発行者が
 自分が信頼する認可サーバのものであることを確認します。
 
+```json
+{
+  "issuer": "https://auth.example.com"
+}
+```
+
 #### 受信者 (audience)
 
 アクセストークンの受信者、つまりアクセストークンがアクセスを許可するリソースサーバの識別子です。
 リソースサーバは、この識別子が自分自身の識別子と一致することを検証します。
+
+```json
+{
+  "audience": "https://api.example.com"
+}
+```
 
 アクセストークンは、受信者を複数含むことができます。
 例えば、一つのアクセストークンで複数のリソースサーバにアクセスできる場合などです。
 
 このとき、受信者が配列の形で表現されることがあります。
 複数の受信者が含まれる場合、リソースサーバは自分自身の受信者識別子がそのリストの中に含まれていることを確認します。
+
+```json
+{
+  "audience": ["https://api.example.com", "https://files.example.com"]
+}
+```
 
 #### スコープ (scope)
 
@@ -74,6 +92,12 @@ OAuth 2.0 ではアクセストークンの形式が定義されていないた�
 
 スコープの検証はアプリケーションの実装に依存するため、
 具体的な方法はここでは解説しません。
+
+```json
+{
+  "scope": "read write"
+}
+```
 
 ### 検証手順の注意点
 
@@ -100,6 +124,31 @@ RFC 7662 で定義されています。[^rfc7662-introspection]
 その情報を元にトークンの有効性とメタデータを検証します。
 
 [^rfc7662-introspection]: RFC 7662 は OAuth 2.0 Token Introspection の仕様で、リソースサーバが認可サーバにトークン情報を問い合わせるためのエンドポイントを定義しています。https://www.rfc-editor.org/rfc/rfc7662.html
+
+Token Introspection エンドポイントへの問い合わせは、
+通常は HTTP POST リクエストで行います。
+リクエストボディには、検証したいアクセストークンを `token` パラメータとして含めます。
+
+```http
+POST /introspect HTTP/1.1
+Host: auth.example.com
+Content-Type: application/x-www-form-urlencoded
+token=ACCESS_TOKEN_VALUE
+```
+
+レスポンスは JSON 形式で返され、アクセストークンの情報が含まれます。
+
+```json
+{
+  "active": true,
+  "iss": "https://auth.example.com",
+  "aud": "https://api.example.com",
+  "scope": "read write",
+  "exp": 1618884471,
+  "iat": 1618880871,
+  ...
+}
+```
 
 ### アクセストークンの有効性検証
 
