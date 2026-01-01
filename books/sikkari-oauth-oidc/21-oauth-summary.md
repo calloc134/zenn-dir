@@ -99,10 +99,10 @@ OAuth 2.0 は、本体である RFC6749 以外にも多数の拡張仕様が存�
 | Public Client のリフレッシュトークン               | 制約なし                                                                   | **Sender-Constrained <br>またはローテーション必須**     |
 | クライアント認証の推奨方式                         | `client_secret_basic`→MUST<br>`client_secret_post`→MAY(非推奨)             | `client_secret_basic`→MAY<br>`client_secret_post`→MUST  |
 | 認可コードリクエスト時の redirect_uri 完全一致検証 | 推奨                                                                       | **必須**                                                |
-| アクセストークン送付方法                           | `Authorization` ヘッダ<br>リクエストボディ<br>URI クエリパラメータ の 3 つ | URL クエリパラメータの禁止<br>その他は OAuth 2.0 と同様 |
+| アクセストークン送付方法の一部削除                 | `Authorization` ヘッダ<br>リクエストボディ<br>URI クエリパラメータ の 3 つ | URL クエリパラメータの禁止<br>その他は OAuth 2.0 と同様 |
 | トークンリクエスト時の redirect_uri                | 必須                                                                       | **削除**（PKCE で代替）                                 |
 
-![](/images/20-oauth-summary/2025-12-29-10-59-36.png)
+![](/images/21-oauth-summary/2026-01-01-17-04-27.png)
 
 ### PKCE の必須化
 
