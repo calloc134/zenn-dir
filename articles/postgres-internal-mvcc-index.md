@@ -305,7 +305,7 @@ PostgreSQL では、
 今回は解説の都合上、分けて説明しています。具体的な実装は割愛します。
 :::
 
-#### ソースコード: 物理タプルのデータ構造
+:::details 物理タプルのデータ構造のソースコード実装
 
 実際の PostgreSQL ソースコードでは、物理タプルのヘッダは以下のように定義されています。
 
@@ -342,7 +342,9 @@ struct HeapTupleHeaderData
 };
 ```
 
-> 引用元: [postgres/src/include/access/htup_details.h#L121-L180](https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L121-L180)
+https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L121-L180
+
+:::
 
 ### スナップショットのパラメータ
 
@@ -366,7 +368,7 @@ struct HeapTupleHeaderData
 
 可視性チェックの詳しいアルゴリズムも含めたパラメータ解説は後述します。
 
-#### ソースコード: スナップショットのデータ構造
+:::details スナップショットのデータ構造のソースコード実装
 
 実際の PostgreSQL ソースコードでは、スナップショットは以下のように定義されています。
 
@@ -399,7 +401,9 @@ typedef struct SnapshotData
 } SnapshotData;
 ```
 
-> 引用元: [postgres/src/include/utils/snapshot.h#L138-L211](https://github.com/postgres/postgres/blob/master/src/include/utils/snapshot.h#L138-L211)
+https://github.com/postgres/postgres/blob/master/src/include/utils/snapshot.h#L138-L211
+
+:::
 
 ## 可視性チェックアルゴリズム
 
@@ -473,7 +477,7 @@ PostgreSQL における可視性チェックアルゴリズムは、
 
 このようにして、スナップショットの可視性チェックアルゴリズムは動作します。
 
-#### ソースコード: XidInMVCCSnapshot 関数
+:::details XidInMVCCSnapshot 関数のソースコード実装
 
 実際の PostgreSQL ソースコードでは、`XidInMVCCSnapshot` 関数が上記のアルゴリズムを実装しています。
 
@@ -500,7 +504,9 @@ XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
 }
 ```
 
-> 引用元: [postgres/src/backend/utils/time/snapmgr.c#L1868-L1958](https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L1868-L1958)
+https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L1868-L1958
+
+:::
 
 ### 物理タプルの可視性チェックアルゴリズム
 
@@ -519,7 +525,7 @@ XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
 単一論理行に対する複数の物理タプルが存在した場合でも、可視性チェックアルゴリズムによって
 最終的に単一論理行に対応するタプルが 0 or 1 個の物理タプルに絞り込まれます。
 
-では、具体的なアルゴリズムは以下の通りです。
+では、タプルの可視性チェックアルゴリズムの詳細を見ていきましょう。
 ここでは簡単のため、複数トランザクションに関連する複雑なケースは割愛します。
 
 #### 前提
@@ -528,7 +534,7 @@ XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
 2. 現在の自分のトランザクションの ID `XID` を取得
 3. スナップショットを取得 (スナップショットを作成するタイミングはトランザクション分離モデルによって異なるため後述)
 
-#### A. 挿入されたときのトランザクションの可視性チェック (`t_xmin` について)
+#### A. 挿入側のタプル可視性チェック (`t_xmin` について)
 
 1. `t_xmin` のトランザクションが ABORTED されている場合、タプルは不可視 (挿入がなかったものとして扱うため)
 2. `t_xmin` のトランザクションが自分のトランザクションなら
@@ -541,7 +547,7 @@ XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
    2. 可視の場合、挿入が可視なので B へ進む (他人のトランザクションによって挿入されたが、そのスナップショットから見て変更がコミットされているため)
    3. 不可視の場合、タプルは不可視 (他人のトランザクションによって挿入されたが、そのスナップショットから見て変更がコミットされていないため)
 
-#### B. 削除 or 更新されたときのトランザクションの可視性チェック (`t_xmax` について)
+#### B. 削除 or 更新側のタプル可視性チェック (`t_xmax` について)
 
 1. 以下の条件に該当する場合、タプルは可視 (削除 or 更新されていない最新のタプルであるため)
    - `t_xmax == 0`
@@ -560,7 +566,7 @@ XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
 このようにして、物理タプルの可視性チェックアルゴリズムは動作します。
 A/B において、ステップ 2、ステップ 3 のアルゴリズムは、処理の内容が同じであることがわかります。
 
-#### ソースコード: HeapTupleSatisfiesMVCC 関数
+:::details HeapTupleSatisfiesMVCC 関数のソースコード実装
 
 実際の PostgreSQL ソースコードでは、`HeapTupleSatisfiesMVCC` 関数が上記のアルゴリズムを実装しています。
 以下はその核心部分です。
@@ -631,7 +637,9 @@ HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot, Buffer buffer)
 }
 ```
 
-> 引用元: [postgres/src/backend/access/heap/heapam_visibility.c#L861-L1017](https://github.com/postgres/postgres/blob/master/src/backend/access/heap/heapam_visibility.c#L861-L1017)
+https://github.com/postgres/postgres/blob/master/src/backend/access/heap/heapam_visibility.c#L861-L1017
+
+:::
 
 ## トランザクション分離モデルの実装差分
 
@@ -642,7 +650,8 @@ HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot, Buffer buffer)
 
 の 2 つのトランザクション分離モデルが存在します。
 
-これら 2 つのトランザクション分離モデルの違いは、**スナップショットを取得するタイミングの違い**です。
+これら 2 つのトランザクション分離モデルの違いは、
+**スナップショットを取得するタイミングの違い**です。
 
 #### ソースコード: トランザクション分離レベルの定義
 
@@ -683,7 +692,7 @@ HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot, Buffer buffer)
 そのスナップショットをトランザクションの終了まで保持し続けることで
 「Repeatable Read」のトランザクション分離モデルを実装しています。
 
-#### ソースコード: GetTransactionSnapshot 関数
+:::details GetTransactionSnapshot 関数のソースコード実装
 
 実際の PostgreSQL ソースコードでは、`GetTransactionSnapshot` 関数がスナップショット取得のタイミングを制御しています。
 
@@ -729,9 +738,11 @@ GetTransactionSnapshot(void)
 }
 ```
 
-> 引用元: [postgres/src/backend/utils/time/snapmgr.c#L272-L344](https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L272-L344)
+https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L272-L344
 
-#### ソースコード: GetSnapshotData 関数
+:::
+
+:::details GetSnapshotData 関数のソースコード実装
 
 スナップショットの生成は `GetSnapshotData` 関数で行われます。ここで `xmin`/`xmax`/`xip` が設定されます。
 
@@ -775,7 +786,9 @@ GetSnapshotData(Snapshot snapshot)
 }
 ```
 
-> 引用元: [postgres/src/backend/storage/ipc/procarray.c#L2091-L2220](https://github.com/postgres/postgres/blob/master/src/backend/storage/ipc/procarray.c#L2091-L2220)
+https://github.com/postgres/postgres/blob/master/src/backend/storage/ipc/procarray.c#L2091-L2220
+
+:::
 
 ## インデックス (b-link tree)
 
