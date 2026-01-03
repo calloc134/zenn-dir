@@ -305,6 +305,45 @@ PostgreSQL では、
 今回は解説の都合上、分けて説明しています。具体的な実装は割愛します。
 :::
 
+#### ソースコード: 物理タプルのデータ構造
+
+実際の PostgreSQL ソースコードでは、物理タプルのヘッダは以下のように定義されています。
+
+```c
+// HeapTupleFields 構造体: t_xmin, t_xmax, t_cid を保持
+typedef struct HeapTupleFields
+{
+    TransactionId t_xmin;       /* inserting xact ID */
+    TransactionId t_xmax;       /* deleting or locking xact ID */
+
+    union
+    {
+        CommandId   t_cid;      /* inserting or deleting command ID, or both */
+        TransactionId t_xvac;   /* old-style VACUUM FULL xact ID */
+    }           t_field3;
+} HeapTupleFields;
+
+// HeapTupleHeaderData 構造体: タプルヘッダ全体
+struct HeapTupleHeaderData
+{
+    union
+    {
+        HeapTupleFields t_heap;
+        DatumTupleFields t_datum;
+    }           t_choice;
+
+    ItemPointerData t_ctid;     /* current TID of this or newer tuple */
+
+    uint16      t_infomask2;    /* number of attributes + various flags */
+    uint16      t_infomask;     /* various flag bits */
+    uint8       t_hoff;         /* sizeof header incl. bitmap, padding */
+
+    bits8       t_bits[FLEXIBLE_ARRAY_MEMBER];  /* bitmap of NULLs */
+};
+```
+
+> 引用元: [postgres/src/include/access/htup_details.h#L121-L180](https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L121-L180)
+
 ### スナップショットのパラメータ
 
 スナップショットの重要なパラメータとして、以下のものがあります。
@@ -326,6 +365,41 @@ PostgreSQL では、
 :::
 
 可視性チェックの詳しいアルゴリズムも含めたパラメータ解説は後述します。
+
+#### ソースコード: スナップショットのデータ構造
+
+実際の PostgreSQL ソースコードでは、スナップショットは以下のように定義されています。
+
+```c
+typedef struct SnapshotData
+{
+    SnapshotType snapshot_type; /* type of snapshot */
+
+    /*
+     * An MVCC snapshot can never see the effects of XIDs >= xmax.
+     * It can see the effects of all older XIDs except those listed in the snapshot.
+     * xmin is stored as an optimization to avoid needing to search the XID arrays.
+     */
+    TransactionId xmin;         /* all XID < xmin are visible to me */
+    TransactionId xmax;         /* all XID >= xmax are invisible to me */
+
+    /*
+     * For normal MVCC snapshot this contains the all xact IDs that are in progress.
+     * note: all ids in xip[] satisfy xmin <= xip[i] < xmax
+     */
+    TransactionId *xip;
+    uint32      xcnt;           /* # of xact ids in xip[] */
+
+    TransactionId *subxip;      /* subxact IDs that are in progress */
+    int32       subxcnt;        /* # of xact ids in subxip[] */
+    bool        suboverflowed;  /* has the subxip array overflowed? */
+
+    CommandId   curcid;         /* in my xact, CID < curcid are visible */
+    /* ... 以下省略 ... */
+} SnapshotData;
+```
+
+> 引用元: [postgres/src/include/utils/snapshot.h#L138-L211](https://github.com/postgres/postgres/blob/master/src/include/utils/snapshot.h#L138-L211)
 
 ## 可視性チェックアルゴリズム
 
@@ -399,6 +473,35 @@ PostgreSQL における可視性チェックアルゴリズムは、
 
 このようにして、スナップショットの可視性チェックアルゴリズムは動作します。
 
+#### ソースコード: XidInMVCCSnapshot 関数
+
+実際の PostgreSQL ソースコードでは、`XidInMVCCSnapshot` 関数が上記のアルゴリズムを実装しています。
+
+```c
+/*
+ * XidInMVCCSnapshot
+ *      Is the given XID still-in-progress according to the snapshot?
+ */
+bool
+XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
+{
+    /* Any xid < xmin is not in-progress */
+    if (TransactionIdPrecedes(xid, snapshot->xmin))
+        return false;
+    /* Any xid >= xmax is in-progress */
+    if (TransactionIdFollowsOrEquals(xid, snapshot->xmax))
+        return true;
+
+    /* xmin <= xid < xmax の範囲は xip 配列を検索 */
+    if (pg_lfind32(xid, snapshot->xip, snapshot->xcnt))
+        return true;
+
+    return false;
+}
+```
+
+> 引用元: [postgres/src/backend/utils/time/snapmgr.c#L1868-L1958](https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L1868-L1958)
+
 ### 物理タプルの可視性チェックアルゴリズム
 
 次に、物理タプルの可視性チェックアルゴリズムについて解説します。
@@ -457,6 +560,79 @@ PostgreSQL における可視性チェックアルゴリズムは、
 このようにして、物理タプルの可視性チェックアルゴリズムは動作します。
 A/B において、ステップ 2、ステップ 3 のアルゴリズムは、処理の内容が同じであることがわかります。
 
+#### ソースコード: HeapTupleSatisfiesMVCC 関数
+
+実際の PostgreSQL ソースコードでは、`HeapTupleSatisfiesMVCC` 関数が上記のアルゴリズムを実装しています。
+以下はその核心部分です。
+
+```c
+static bool
+HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot, Buffer buffer)
+{
+    HeapTupleHeader tuple = htup->t_data;
+
+    /* A. t_xmin (挿入トランザクション) の可視性チェック */
+    if (!HeapTupleHeaderXminCommitted(tuple))
+    {
+        if (HeapTupleHeaderXminInvalid(tuple))
+            return false;   /* xmin が ABORTED なら不可視 */
+
+        /* 自分のトランザクションによる挿入の場合 */
+        if (TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetRawXmin(tuple)))
+        {
+            if (HeapTupleHeaderGetCmin(tuple) >= snapshot->curcid)
+                return false;   /* inserted after scan started */
+
+            if (tuple->t_infomask & HEAP_XMAX_INVALID)
+                return true;    /* xmax 無効なら可視 */
+
+            if (HEAP_XMAX_IS_LOCKED_ONLY(tuple->t_infomask))
+                return true;    /* ロックのみなら可視 */
+
+            /* 自トランザクションで削除済みかチェック */
+            if (HeapTupleHeaderGetCmax(tuple) >= snapshot->curcid)
+                return true;    /* deleted after scan started */
+            else
+                return false;   /* deleted before scan started */
+        }
+        /* 他トランザクションによる挿入の場合 */
+        else if (XidInMVCCSnapshot(HeapTupleHeaderGetRawXmin(tuple), snapshot))
+            return false;       /* まだ進行中なので不可視 */
+        else if (TransactionIdDidCommit(HeapTupleHeaderGetRawXmin(tuple)))
+            /* コミット済みなので B へ進む */;
+        else
+            return false;       /* ABORTED なので不可視 */
+    }
+
+    /* B. t_xmax (削除/更新トランザクション) の可視性チェック */
+    if (tuple->t_infomask & HEAP_XMAX_INVALID)
+        return true;            /* xmax 無効なら可視 */
+
+    if (HEAP_XMAX_IS_LOCKED_ONLY(tuple->t_infomask))
+        return true;            /* ロックのみなら可視 */
+
+    /* 自分のトランザクションによる削除の場合 */
+    if (TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetRawXmax(tuple)))
+    {
+        if (HeapTupleHeaderGetCmax(tuple) >= snapshot->curcid)
+            return true;        /* deleted after scan started */
+        else
+            return false;       /* deleted before scan started */
+    }
+
+    /* 他トランザクションによる削除の場合 */
+    if (XidInMVCCSnapshot(HeapTupleHeaderGetRawXmax(tuple), snapshot))
+        return true;            /* まだ進行中なので可視 */
+
+    if (!TransactionIdDidCommit(HeapTupleHeaderGetRawXmax(tuple)))
+        return true;            /* ABORTED なので可視 */
+
+    return false;               /* コミット済みなので不可視 */
+}
+```
+
+> 引用元: [postgres/src/backend/access/heap/heapam_visibility.c#L861-L1017](https://github.com/postgres/postgres/blob/master/src/backend/access/heap/heapam_visibility.c#L861-L1017)
+
 ## トランザクション分離モデルの実装差分
 
 前述の通り、PostgreSQL には大きく
@@ -467,6 +643,28 @@ A/B において、ステップ 2、ステップ 3 のアルゴリズムは、�
 の 2 つのトランザクション分離モデルが存在します。
 
 これら 2 つのトランザクション分離モデルの違いは、**スナップショットを取得するタイミングの違い**です。
+
+#### ソースコード: トランザクション分離レベルの定義
+
+実際の PostgreSQL ソースコードでは、トランザクション分離レベルは以下のように定義されています。
+
+```c
+/* Xact isolation levels */
+#define XACT_READ_UNCOMMITTED   0
+#define XACT_READ_COMMITTED     1
+#define XACT_REPEATABLE_READ    2
+#define XACT_SERIALIZABLE       3
+
+/*
+ * We implement three isolation levels internally.
+ * The weakest uses one snapshot per statement;
+ * the two stronger levels use one snapshot per database transaction.
+ */
+#define IsolationUsesXactSnapshot() (XactIsoLevel >= XACT_REPEATABLE_READ)
+#define IsolationIsSerializable() (XactIsoLevel == XACT_SERIALIZABLE)
+```
+
+> 引用元: [postgres/src/include/access/xact.h#L36-L53](https://github.com/postgres/postgres/blob/master/src/include/access/xact.h#L36-L53)
 
 ### 「Read Committed」 の実装
 
@@ -484,6 +682,100 @@ A/B において、ステップ 2、ステップ 3 のアルゴリズムは、�
 そのため、トランザクションの最初の文が開始したタイミングでスナップショットを取得し、
 そのスナップショットをトランザクションの終了まで保持し続けることで
 「Repeatable Read」のトランザクション分離モデルを実装しています。
+
+#### ソースコード: GetTransactionSnapshot 関数
+
+実際の PostgreSQL ソースコードでは、`GetTransactionSnapshot` 関数がスナップショット取得のタイミングを制御しています。
+
+```c
+Snapshot
+GetTransactionSnapshot(void)
+{
+    /* First call in transaction? */
+    if (!FirstSnapshotSet)
+    {
+        /*
+         * In transaction-snapshot mode (Repeatable Read / Serializable),
+         * the first snapshot must live until end of xact.
+         */
+        if (IsolationUsesXactSnapshot())
+        {
+            /* First, create the snapshot in CurrentSnapshotData */
+            if (IsolationIsSerializable())
+                CurrentSnapshot = GetSerializableTransactionSnapshot(&CurrentSnapshotData);
+            else
+                CurrentSnapshot = GetSnapshotData(&CurrentSnapshotData);
+            /* Make a saved copy */
+            CurrentSnapshot = CopySnapshot(CurrentSnapshot);
+            FirstXactSnapshot = CurrentSnapshot;
+            /* ... スナップショットを登録 ... */
+        }
+        else
+            /* Read Committed: 毎回新しいスナップショットを取得 */
+            CurrentSnapshot = GetSnapshotData(&CurrentSnapshotData);
+
+        FirstSnapshotSet = true;
+        return CurrentSnapshot;
+    }
+
+    /* Repeatable Read/Serializable: 最初のスナップショットを再利用 */
+    if (IsolationUsesXactSnapshot())
+        return CurrentSnapshot;
+
+    /* Read Committed: 毎クエリで新しいスナップショットを取得 */
+    CurrentSnapshot = GetSnapshotData(&CurrentSnapshotData);
+
+    return CurrentSnapshot;
+}
+```
+
+> 引用元: [postgres/src/backend/utils/time/snapmgr.c#L272-L344](https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L272-L344)
+
+#### ソースコード: GetSnapshotData 関数
+
+スナップショットの生成は `GetSnapshotData` 関数で行われます。ここで `xmin`/`xmax`/`xip` が設定されます。
+
+```c
+/*
+ * GetSnapshotData -- returns information about running transactions.
+ *
+ * The returned snapshot includes xmin (lowest still-running xact ID),
+ * xmax (highest completed xact ID + 1), and a list of running xact IDs
+ * in the range xmin <= xid < xmax.  It is used as follows:
+ *      All xact IDs < xmin are considered finished.
+ *      All xact IDs >= xmax are considered still running.
+ *      For an xact ID xmin <= xid < xmax, consult list to see whether
+ *      it is considered running or not.
+ */
+Snapshot
+GetSnapshotData(Snapshot snapshot)
+{
+    TransactionId xmin;
+    TransactionId xmax;
+    FullTransactionId latest_completed;
+
+    /* ... 初期化処理 ... */
+
+    latest_completed = TransamVariables->latestCompletedXid;
+
+    /* xmax is always latestCompletedXid + 1 */
+    xmax = XidFromFullTransactionId(latest_completed);
+    TransactionIdAdvance(xmax);
+
+    /* initialize xmin calculation with xmax */
+    xmin = xmax;
+
+    /* ... 進行中のトランザクションを xip 配列に収集 ... */
+
+    snapshot->xmin = xmin;
+    snapshot->xmax = xmax;
+    /* ... */
+
+    return snapshot;
+}
+```
+
+> 引用元: [postgres/src/backend/storage/ipc/procarray.c#L2091-L2220](https://github.com/postgres/postgres/blob/master/src/backend/storage/ipc/procarray.c#L2091-L2220)
 
 ## インデックス (b-link tree)
 
