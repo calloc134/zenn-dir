@@ -342,7 +342,7 @@ struct HeapTupleHeaderData
 };
 ```
 
-https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L121-L180
+https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/include/access/htup_details.h#L121-L180
 
 :::
 
@@ -401,7 +401,7 @@ typedef struct SnapshotData
 } SnapshotData;
 ```
 
-https://github.com/postgres/postgres/blob/master/src/include/utils/snapshot.h#L138-L211
+https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/include/utils/snapshot.h#L138-L211
 
 :::
 
@@ -504,7 +504,7 @@ XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot)
 }
 ```
 
-https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L1868-L1958
+https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/backend/utils/time/snapmgr.c#L1868-L1958
 
 :::
 
@@ -637,7 +637,7 @@ HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot, Buffer buffer)
 }
 ```
 
-https://github.com/postgres/postgres/blob/master/src/backend/access/heap/heapam_visibility.c#L861-L1017
+https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/backend/access/heap/heapam_visibility.c#L861-L1017
 
 :::
 
@@ -673,7 +673,7 @@ https://github.com/postgres/postgres/blob/master/src/backend/access/heap/heapam_
 #define IsolationIsSerializable() (XactIsoLevel == XACT_SERIALIZABLE)
 ```
 
-> 引用元: [postgres/src/include/access/xact.h#L36-L53](https://github.com/postgres/postgres/blob/master/src/include/access/xact.h#L36-L53)
+> 引用元: [postgres/src/include/access/xact.h#L36-L53](https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/include/access/xact.h#L36-L53)
 
 ### 「Read Committed」 の実装
 
@@ -738,7 +738,7 @@ GetTransactionSnapshot(void)
 }
 ```
 
-https://github.com/postgres/postgres/blob/master/src/backend/utils/time/snapmgr.c#L272-L344
+https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/backend/utils/time/snapmgr.c#L272-L344
 
 :::
 
@@ -786,7 +786,7 @@ GetSnapshotData(Snapshot snapshot)
 }
 ```
 
-https://github.com/postgres/postgres/blob/master/src/backend/storage/ipc/procarray.c#L2091-L2220
+https://github.com/postgres/postgres/blob/094b61ce3ebbb1258675cb9b4eca9198628e2177/src/backend/storage/ipc/procarray.c#L2091-L2220
 
 :::
 
