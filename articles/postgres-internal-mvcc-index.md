@@ -8,7 +8,7 @@ published: true
 
 # はじめに
 
-こんにちは。かろっくです。
+こんにちは。かろっく@calloc134 です。
 
 巷では NewSQL が流行りを見せていますが、皆さんこう思ったことはありませんか？
 
@@ -866,3 +866,6 @@ https://www.postgresql.org/docs/current/transaction-id.html
 
 また、PostgreSQL の内部構造について調べるきっかけとなった以下の動画にも感謝いたします。
 https://www.youtube.com/watch?v=FIXzD_2GtDo
+
+また、今回の記事を踏まえ更に詳しく知りたい方は、以下の記事も参考になるかと思います。
+https://www.nminoru.jp/~nminoru/postgresql/pg-transaction-mvcc-snapshot.html
