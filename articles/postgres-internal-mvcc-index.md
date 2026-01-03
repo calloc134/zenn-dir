@@ -3,7 +3,7 @@ title: "横断的に理解する PostgreSQL の 内部データ構造: MVCC・�
 emoji: "🐘"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["postgresql", "mvcc", "index", "rdbms", "database"]
-published: false
+published: true
 ---
 
 # はじめに
