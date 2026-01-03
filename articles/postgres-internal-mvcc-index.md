@@ -52,6 +52,8 @@ PostgreSQL の特徴として、以下の点が挙げられます。
 - インデックス構造
 - トランザクション分離モデル
 
+![](/images/postgres-internal-mvcc-index/2026-01-03-16-57-51.png)
+
 一つずつ見ていきましょう。
 
 ### 追記型アーキテクチャとは
@@ -125,8 +127,10 @@ Lehman & Yao の高並行 B-tree アルゴリズムに基づいており、B-lin
 これを実現するための仕組みとして、前述のスナップショットが用いられます。
 
 トランザクションには、ANSI SQL 標準という、データベースの動作を規定した国際標準規格があります。
-しかし、PostgreSQL は ANSI SQL 標準に準拠していない部分があります。
-今回は ANSI SQL 標準に基づいた解説ではなく、PostgreSQL 独自のトランザクション分離モデルに基づいた解説を行います。
+しかし、PostgreSQL は **ANSI SQL 標準に準拠していない部分があります**。
+
+今回は ANSI SQL 標準に基づいた解説ではなく、
+PostgreSQL 独自のトランザクション分離モデルに基づいた解説を行います。
 
 PostgreSQL で普段よく使われるトランザクション分離モデルとして、
 「Read Committed」と「Repeatable Read」の 2 つが存在しています。
@@ -181,6 +185,15 @@ A トランザクション進行中において、
 - Phantom Read の防止:
   - A トランザクション内で、1 回目のクエリ実行時に存在しなかった行は、
     2 回目のクエリ実行時にも存在しないことが保証される
+
+:::message
+
+本来の Repeatable Read は、ANSI SQL 標準に基づくと
+Phantom Read を防止できません。
+今回の解説では PostgreSQL 準拠であるため、
+Phantom Read も防止できる形で説明しています。
+
+:::
 
 #### 2 つの違い
 
@@ -478,6 +491,8 @@ PostgreSQL における可視性チェックアルゴリズムは、
      - `XID` が ABORTED されていたなら不可視
 
 このようにして、スナップショットの可視性チェックアルゴリズムは動作します。
+
+![](/images/postgres-internal-mvcc-index/2026-01-03-16-38-40.png)
 
 :::details XidInMVCCSnapshot 関数のソースコード実装
 
