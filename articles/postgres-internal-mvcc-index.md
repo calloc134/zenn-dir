@@ -67,7 +67,9 @@ PostgreSQL の特徴として、以下の点が挙げられます。
 
 残った古いバージョンの物理タプルは領域を占有し続けるため、
 不要になった時点で VACUUM という仕組みによって削除され、領域が再利用されます。
-ちょうど、プログラミング言語におけるガベージコレクションのようなイメージです。
+ちょうど、プログラミング言語における**ガベージコレクション**のようなイメージです。
+
+![](/images/postgres-internal-mvcc-index/2026-01-04-11-44-00.png)
 
 ## MVCC (Multi-Version Concurrency Control) とは
 
@@ -90,6 +92,8 @@ MVCC によって、**読み取りが書き込みをブロックしない**高�
 あるスナップショットに基づく読み取り操作は、
 そのスナップショットが取得された瞬間のデータベースの状態が固定されているかのように振る舞います。
 
+![](/images/postgres-internal-mvcc-index/2026-01-04-11-45-15.png)
+
 :::message
 なお、読み取りが書き込みをブロックしないというだけで、書き込みが書き込みをブロックしないわけではない点に注意が必要です。その場合は行レベルロックなどの別種の仕組みが用いられます。書き込みについては少し複雑なので、今回の解説では割愛します。
 :::
@@ -107,6 +111,8 @@ PostgreSQL のインデックスは**データと強く分離**されており�
 この点において、MySQL (InnoDB) のとる「インデックス内部にデータを内包する」
 クラスタ化インデックスとは方針の違いがあります。
 
+![](/images/postgres-internal-mvcc-index/2026-01-04-11-45-37.png)
+
 この記事では解説を割愛しますが、クラスタ化インデックスについて詳しく知りたい方は、以下の記事を参照してください。
 https://zenn.dev/calloc134/articles/4f96b0fe093489
 
@@ -118,7 +124,10 @@ PostgreSQL の設計は古典的な RDBMS の設計思想に近いです。
 
 この記事では特に B-tree (b-link tree) に焦点を当てます。
 PostgreSQL の採用している B-tree は
-Lehman & Yao の高並行 B-tree アルゴリズムに基づいており、B-link tree と呼称される形で実装されています。
+Lehman & Yao の高並行 B-tree アルゴリズムに基づいており、
+B-link tree と呼称される形で実装されています。
+
+https://zenn.dev/hmarui66/articles/b87d6be351d6e2
 
 ## トランザクション分離モデル
 
@@ -166,6 +175,8 @@ X トランザクションがコミットされた後に取得した 2 回目で
 - Phantom Read:
   - A トランザクション内で、1 回目のクエリ実行時には存在しなかった行が、2 回目のクエリ実行時には存在するようになる現象
 
+![](/images/postgres-internal-mvcc-index/2026-01-04-12-15-12.png)
+
 ### 「Repeatable Read」
 
 Repeatable Read とは、
@@ -186,12 +197,18 @@ A トランザクション進行中において、
   - A トランザクション内で、1 回目のクエリ実行時に存在しなかった行は、
     2 回目のクエリ実行時にも存在しないことが保証される
 
+![](/images/postgres-internal-mvcc-index/2026-01-04-12-15-34.png)
+
 :::message
 
 本来の Repeatable Read は、ANSI SQL 標準に基づくと
 Phantom Read を防止できません。
 今回の解説では PostgreSQL 準拠であるため、
 Phantom Read も防止できる形で説明しています。
+
+PostgreSQL 公式は、
+PostgreSQL における Repeatable Read について、
+Snapshot Isolation レベルと等価であるとしています。
 
 :::
 
@@ -201,7 +218,12 @@ Phantom Read も防止できる形で説明しています。
 
 **スナップショットを取るタイミングが「文ごと」か「トランザクションごと」か** にあります。
 
+Read Committed では各文ごとにスナップショットを取得するのに対し、
+Repeatable Read ではトランザクション開始後の最初の文が開始したタイミングでスナップショットを取得します。
+
 詳細は後ほど実装を踏まえて解説します。
+
+![](/images/postgres-internal-mvcc-index/2026-01-04-12-19-49.png)
 
 # PostgreSQL におけるデータ構造の詳細
 
