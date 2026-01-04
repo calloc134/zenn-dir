@@ -856,6 +856,8 @@ PostgreSQL では、**インデックスとデータは完全に分離**され�
 同じ leaf ページに異なる論理行の `(key, ctid)` データがあることもあります。
 逆に異なる leaf ページに同じ論理行の `(key, ctid)` データが存在することもあります。
 
+![](/images/postgres-internal-mvcc-index/2026-01-04-12-41-37.png)
+
 B-link tree については詳細な説明を割愛しますが、データ構造が気になる方は以下の記事を読むと良いでしょう。
 
 https://zenn.dev/hmarui66/articles/b87d6be351d6e2
