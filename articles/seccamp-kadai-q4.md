@@ -36,12 +36,12 @@ https://www.ipa.go.jp/jinzai/security-camp/2025/camp/zenkoku/sbn8o1000000c4oy-at
 # 前提
 
 この攻撃手法を理解するためには、まず OAuth の具体的なフローを把握しておく必要があります。以前執筆したブログを参考にして、OAuth の基本的な流れを復習しておくと良いでしょう。
-https://zenn.dev/calloc134/articles/5e8da6c491e720#oauth-の登場人物
-https://zenn.dev/calloc134/articles/5e8da6c491e720#ざっくりとしたフロー
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/04-oauth-actors
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/05-auth-code-flow-simple
 
 また、OAuth に対する攻撃に関連して必要な知識は、以下のとおりです。
-https://zenn.dev/calloc134/articles/5e8da6c491e720#認可コードはどのように奪われるんでしょうか？-⏩
-https://zenn.dev/calloc134/articles/5e8da6c491e720#奪われた認可コードはどのように使われるんでしょうか？⏩
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/11-auth-code-theft-attack
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/12-token-theft-attack
 
 なお、以降の文章はレポートの文体に合わせるため少し堅い表現になっていますが、ご了承ください。
 
@@ -188,7 +188,7 @@ OAuth のオープンリダイレクト攻撃対策としては`redirect_uri`の
 この攻撃の最終的な到達点としては、認可コードを奪取することにある。つまり、認可コードを盗んだ後の攻撃については考慮をしていないことに注意が必要である。いわば、上記の記事で解説した「認可コードを盗む攻撃」の一種である。
 認可コードを盗んだとしても、PKCE などの機構によって認可コードがアクセストークンに引き換えられない場合、攻撃者は認可コードを利用してアクセストークンを取得することができないため被害の拡大を防ぐことができる。
 PKCE の詳細に関しては、以下のブログ記事を参照していただきたい。
-https://zenn.dev/calloc134/articles/5e8da6c491e720#奪われた認可コードはどのように使われるんでしょうか？⏩
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/12-token-theft-attack
 
 ## レスポンスタイプの指定について
 
