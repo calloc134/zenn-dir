@@ -233,13 +233,40 @@ published: false
     - トークン文字列が JavaScript からアクセス可能であるため
       - 永続的なトークン奪取リスクが残る
     - 悪意ある JavaScript の実行を防ぐ対策が重要
-- 非推奨1: B on non-httponly cookie
+- 非推奨 1: B on non-httponly cookie
   - assertion 型トークン on httponly でないクッキー
   - JavaScript からアクセス可能であるため β の手法と同様の欠点を持つ
   - 更に CSRF 対策も必要となるため これを採用するメリットはほとんどない
   - α を利用する場合も同様
 
 ## 安全性 ランキング考察
+
+- 先程のランキングは、一つずつ順位を下っていくごとに
+- 一つセキュリティの欠点が増えるようになっている
+  - 1 位 → 2 位:
+    - handle 型トークン on httpOnly クッキー から
+    - 短命 assertion 型トークン + 長命 handle 型トークン on httpOnly クッキー へ
+    - 短命 assertion 型トークンが 盗まれた場合のリスクが増える
+  - 2 位 → 3 位(1):
+    - 短命 assertion 型トークン + 長命 handle 型トークン on httpOnly クッキー から
+    - assertion 型トークン on httpOnly クッキー へ
+    - 長命側トークンの失効可能性が失われる
+  - 2 位 → 3 位(2):
+    - 短命 assertion 型トークン + 長命 handle 型トークン on httpOnly クッキー から
+    - 短命 assertion 型トークン on ブラウザストレージやメモリ + 長命 handle 型トークン on httpOnly クッキー へ
+    - 短命側トークンが JavaScript からアクセス可能になる
+  - 3 位(1): → 4 位:
+    - assertion 型トークン on httpOnly クッキー から
+    - assertion 型トークン on ブラウザストレージやメモリ へ
+    - トークン文字列が JavaScript からアクセス可能になる
+  - 3 位(2): → 4 位:
+    - 短命 assertion 型トークン on ブラウザストレージやメモリ + 長命 handle 型トークン on httpOnly クッキー から
+    - assertion 型トークン on ブラウザストレージやメモリ へ
+    - 長命側トークンの失効可能性が失われる
+- これを図に表すと 以下のハッセ図のようになる
+  - 安全性の高いものほど 上位に位置し
+  - 単純に比較できないものは 枝分かれで表現
+  - (ここに図を記述)
 
 # おわりに
 
