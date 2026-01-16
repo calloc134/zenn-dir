@@ -24,8 +24,10 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
   - ブラウザ上で動作する JavaScript アプリケーション
 - バックエンド: API サーバ
   - REST API や GraphQL API など
-- SPA と API サーバは 異なるオリジンに存在することを想定
-  - 例: SPA が `https://spa.invalid`、API サーバが `https://api.invalid` に存在
+- SPA と API サーバは 異なるオリジン・異なるドメイン・異なるサイトに存在する
+  - ドメインは以下の通り
+    - SPA `https://app.example.com`
+    - API `https://api.example.net`
   - そのため クッキーを利用する場合は 以下の属性となる
     - SameSite 属性: None
     - Secure 属性: true
@@ -398,35 +400,106 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
 
 - API の CSRF 対策についても登場したため、ここでベストプラクティスを整理しておく
 - 今回の構成の前提
+  - ドメインは以下の通り
+    - SPA `https://app.example.com`
+    - API `https://api.example.net`
   - SPA と API が サブドメイン でもない 完全別ドメインに存在
-  - 完全別ドメイン であるため 別オリジンである
   - API サーバは JSON を受け取り JSON を返すことを前提
-    - つまり JSON 形式 `application/json` の リクエストボディ しか受け付けない
-    - そのため HTML フォーム を送信するような 昔ながらの CSRF 攻撃は想定しない
-      - `application/x-www-form-urlencoded`
-      - `multipart/form-data`
-      - `text/plain`
-    - これらのコンテンツタイプは そもそも API サーバで拒否することを前提とする (後述)
-- この場合の CSRF 脅威 と 対策について
-  - 攻撃者サーバ が 提供する JavaScript を 被害者のブラウザ上で 実行させる
+    - つまり JSON 形式 `application/json` の リクエストボディ しか受け付けないようにする
+- 前提知識
+  - オリジン (Origin)
+    - オリジン = スキーム + ホスト + ポート の三要素
+    - 三要素がすべて一致している場合にのみ 同一オリジンとみなされる
+    - 例:
+      - `https://app.example.com`
+        - スキーム: https
+        - ホスト: app.example.com
+        - ポート: 443 (省略時のデフォルトポート)
+      - `https://api.example.net`
+        - スキーム: https
+        - ホスト: api.example.net
+        - ポート: 443 (省略時のデフォルトポート)
+      - これら 2 つのオリジンは 異なるオリジンであるとみなされる
+  - サイト (Site)
+    - サイト = トップレベルドメイン + その直下のドメイン名 の組み合わせ
+      - いわゆる eTLD+1 (effective Top Level Domain + 1) と呼ばれるもの
+      - トップレベルドメイン の 一つ左側のドメイン名 までを含む
+      - 例えば co.uk ドメインの場合は さらにその左側のドメイン名 までを含む
+    - 例:
+      - 別ドメインの場合
+        - `https://app.example.com`
+          - eTLD+1: example.com
+        - `https://api.example.net`
+          - eTLD+1: example.net
+      - サブドメインの場合
+        - `https://app.example.com`
+          - eTLD+1: example.com
+        - `https://api.example.com`
+          - eTLD+1: example.com
+      - この 2 つは 同一サイト とみなされる
+  - CSRF (Cross-Site Request Forgery)
+    - 日本語: クロスサイトリクエストフォージェリ
+    - 意味: 悪意ある第三者の オリジン からの リクエストにより
+    - 被害者のアカウントで 意図しない操作が実行される攻撃
+    - 例:
+      - フォームを用いた 昔ながらの CSRF 攻撃
+        - 1. 被害者が 攻撃者サーバ にアクセス
+        - 2. 攻撃者サーバ が 提供する HTML ページ に 埋め込まれた 画像タグ や フォーム が
+        - 3. 被害者のブラウザ上で 読み込まれ、API サーバ に リクエストが送信される
+        - 4. ブラウザが 自動的に クッキーを送信
+        - 5. API サーバが リクエストを処理し 副作用のある操作を実行
+      - JavaScript を用いた CSRF 攻撃
+        - 1. 被害者が 攻撃者サーバ にアクセス
+        - 2. 攻撃者サーバ が 提供する JavaScript が 被害者のブラウザ上で 実行される
+        - 3. 悪意ある JavaScript が fetch API などを用いて API サーバ に リクエストを送信 (credentials: "include" を指定)
+        - 4. ブラウザが 自動的に クッキーを送信
+        - 5. API サーバが リクエストを処理し 副作用のある操作を実行
+      - 今回の想定
+        - 今回は JavaScript を用いた CSRF 攻撃を主に想定する
+        - そのため HTML フォーム を送信するような 昔ながらの CSRF 攻撃は想定しない
+          - `application/x-www-form-urlencoded`
+          - `multipart/form-data`
+          - `text/plain`
+        - フォーム送信に関するコンテンツタイプは そもそも API サーバで拒否する
+        - 詳細は 後述する
+  - XS-Leak (Cross-Site Leak)
+    - 日本語: クロスサイトリーク
+    - 意味: 悪意ある第三者の オリジン からの リクエストにより
+    - 被害者のアカウントで 実行された操作の結果が 攻撃者に漏洩する攻撃
     - 例:
       - 1. 被害者が 攻撃者サーバ にアクセス
       - 2. 攻撃者サーバ が 提供する JavaScript が 被害者のブラウザ上で 実行される
       - 3. 悪意ある JavaScript が fetch API などを用いて API サーバ に リクエストを送信 (credentials: "include" を指定)
       - 4. ブラウザが 自動的に クッキーを送信
-      - 5. API サーバが リクエストを処理し 副作用のある操作を実行
-- これに対してどのように防御するか
+      - 5. API サーバが リクエストを処理し 副作用のない操作を実行し 結果を返す
+      - 6. 悪意ある JavaScript が 結果を解析し 被害者の情報を取得
+    - 本来であれば CSRF とは区別されるが
+    - 今回は CSRF 対策と合わせて考慮する
+- では、JavaScript を用いた CSRF / XS-Leak 攻撃に対する防御策を説明する
 - 以下の防御策を適用すれば ほとんどの CSRF 攻撃を防げる
 
-  - まず 副作用のある API と 副作用のない API を切り分ける
-    - 副作用 = データベースの状態を変更する可能性があること
-  - メソッドの切り分け
+  - HTTP メソッドの切り分け
+
+    - 副作用 のある API とは
+      - API の呼び出しにより サーバ側の状態が変更される API
+      - 例:
+        - ユーザ登録 API
+        - パスワード変更 API
+        - 商品購入 API
+    - 副作用 のない API とは
+
+      - API の呼び出しにより サーバ側の状態が変更されない API
+      - 例:
+        - ユーザ情報取得 API
+        - 商品一覧取得 API
+
     - 副作用のある API: POST, PUT, PATCH, DELETE などの unsafe method に限定する
     - 副作用のない API: GET, HEAD, OPTIONS などの safe method に限定する
       - この切り分けは 開発者が 意識して行う必要がある
     - CSRF 防御の目的
       - 副作用のある API に対しては 「実行させない」を目的とした 防御策を適用
       - 副作用のない API に対しては 「実行の結果を見られない」を目的とした 防御策を適用
+
   - API 全体に対して
 
     - 適切な CORS (Cross-Origin Resource Sharing) 設定による SOP (Same-Origin Policy) の厳格な適用
@@ -525,10 +598,13 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
         - ただし 自前でミドルウェアを実装する必要あり
     - 余談: SameSite 属性は 利用できない
       - 今回は SPA と API が 完全別ドメインに存在するため
+        - サイトも 別サイト となる
+        - そのため 異なるサイト間のクッキー送信となる
+      - 異なるサイト間のクッキー送信を許可するには
         - SameSite 属性を `None` に設定する必要がある
         - SameSite 属性を `Lax` や `Strict` に設定すると
         - ブラウザが クッキーを送信できなくなるため
-      - CSRF 防御策としては 利用できない
+        - CSRF 防御策としては 利用できない
       - なお、SameSite 属性が `None` の場合
         - Secure 属性を付与する必要があることに注意
 
