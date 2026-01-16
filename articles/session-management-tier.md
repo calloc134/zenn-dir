@@ -190,9 +190,11 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
       - https://github.com/expressjs/session
       - DB を抽象化した ストア という概念を持ち サーバ側に セッション情報を保存可能
       - 様々な DB 用の ストア実装が存在
+      - httpOnly 属性付きクッキーに handle 型トークンを保存
     - Spring Boot: Spring Session
       - https://spring.pleiades.io/spring-session/reference/guides/boot-redis.html
       - Redis などの DB に セッション情報を保存可能
+      - httpOnly 属性付きクッキーに handle 型トークンを保存
     - Auth.js: Database Session
       - https://authjs.dev/concepts/session-strategies#database-session
       - HttpOnly クッキーに handle 型トークンを保存
