@@ -185,6 +185,19 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
     - スケーラビリティが低下
     - レイテンシが増加
     - CSRF 対策が必要(適切に対策すれば問題なし)
+  - 具体的なライブラリ
+    - Express.js: express-session
+      - https://github.com/expressjs/session
+      - DB を抽象化した ストア という概念を持ち サーバ側に セッション情報を保存可能
+      - 様々な DB 用の ストア実装が存在
+    - Spring Boot: Spring Session
+      - https://spring.pleiades.io/spring-session/reference/guides/boot-redis.html
+      - Redis などの DB に セッション情報を保存可能
+    - Auth.js: Database Session
+      - https://authjs.dev/concepts/session-strategies#database-session
+      - HttpOnly クッキーに handle 型トークンを保存
+      - 対応する DB に セッション情報を保存可能
+        - https://authjs.dev/getting-started/database
 - 2 位: C on α
   - 短命 assertion 型トークン + 長命 handle 型トークン on httponly クッキー
   - API 側で セッション情報を管理し 長命側は失効可能
@@ -200,6 +213,7 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
     - 短命側トークンが 盗まれた場合のリスクは残る
       - ただし 短命であるため リスクは できるだけ低減
     - CSRF 対策が必要(適切に対策すれば問題なし)
+  - 具体的なライブラリ
   - 問題点: この形を実装するフレームワークが ほとんどない
     - かろうじて supertokens が 対応している程度
       - 筆者の意見では この形が 最もバランスの良いセッション管理手法であると考えるが
@@ -217,6 +231,14 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
     - API 側で セッション情報を管理しないため 失効が困難
       - 永続的なトークン奪取リスクが残る
     - CSRF 対策が必要(適切に対策すれば問題なし)
+  - 具体的なライブラリ
+    - Hono: hono/session
+      - https://github.com/honojs/middleware/tree/main/packages/session
+      - 内部的に JWE 形式の assertion 型トークンを保存
+      - デフォルトで HttpOnly 属性付きクッキーに保存
+    - Auth.js: JWT Session
+      - https://authjs.dev/concepts/session-strategies#jwt-session
+      - HttpOnly クッキーに assertion 型トークンを保存
 - 4 位: B on β
   - assertion 型トークン on ブラウザストレージやメモリ
   - SPA で よく利用される手法だが 安全性は低い
@@ -228,31 +250,16 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
     - トークン文字列が JavaScript からアクセス可能であるため
       - 永続的なトークン奪取リスクが残る
     - 悪意ある JavaScript の実行を防ぐ対策が重要
-- 同率 4 位: C on β
-  - 短命 assertion 型トークン + 長命 handle 型トークン on ブラウザストレージやメモリ
-  - API 側で セッション情報を管理し 長命側は失効可能
-  - Auth0 などの 外部認可サーバを用いた SPA + API のセッション管理で よく利用される手法
-    - この問題点は 後述する
-  - メリット:
-    - 長命側トークンであれば失効が可能
-      - 永続的なトークン奪取リスクを低減
-    - 短命側トークンが 盗まれた場合のリスクは残る
-      - ただし 短命であるため リスクは できるだけ低減
-    - 双方ともに CSRF 対策が不要
-  - デメリット:
-    - 短命側トークン 及び 長命側トークンが JavaScript からアクセス可能であるため
-      - 永続的なトークン奪取リスクが残る
-      - 特に 長命側トークンは 永続的に奪取されるリスクが高い
-    - 悪意ある JavaScript の実行を防ぐ対策が重要
-  - 余談: B on β との 比較と 同率とした理由
-    - B on β の場合、assertion 型トークン しか存在しないため トークンを奪取されると永続的にアクセスされる
-    - ただし C on β も 長命 handle 型 トークンが 奪取された場合は 同等のリスク
-    - どちらの手法も β であるため、
-      - どのみち 悪意ある JavaScript による トークン奪取による 永続的アクセスのリスクが存在する
-      - assertion 型 トークンの有効期限に左右されるため 一概に比較できない
-      - そのため 同率とした
-      - 逆に言えば、B on β において assertion 型トークンを 短命に設定している場合、
-        - C on β よりも安全といえる可能性もある
+  - 具体的なライブラリ
+    - Auth0 SDK: auth0-spa-js (リフレッシュトークン不使用)
+    - https://authjs.dev/concepts/session-strategies#jwt-session
+    - 以下のような対応
+      - 短命 assertion 型トークン = アクセストークン (JWT)
+      - 長命 handle 型トークン = リフレッシュトークン (ランダム文字列)
+      - トークンはそれぞれ メモリに保存されるが 指定が可能
+    - トークン自体の発行は API サーバではなく 外部の Auth0 サーバが担当する
+    - API サーバが アクセストークンを受け取り それを検証する
+      - 検証の手順を間違えると 脆弱性を招くリスクがあるため 注意が必要
   - 余談: OAuth との関連性と注意点
     - この手法は、API サーバ単体というよりも
       - Auth0 などの 外部認可サーバを用いた SPA + API のセッション管理で よく利用される手法
@@ -270,6 +277,43 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
     - 詳しくは 以前の記事を参照
       - 【OAuth】アクセストークンの検証を誤ると成りすまし攻撃ができます
       - https://zenn.dev/calloc134/articles/oauth-cross-api-vuln-attack
+- 同率 4 位: C on β
+  - 短命 assertion 型トークン + 長命 handle 型トークン on ブラウザストレージやメモリ
+  - API 側で セッション情報を管理し 長命側は失効可能
+  - Auth0 などの 外部認可サーバを用いた SPA + API のセッション管理で よく利用される手法
+    - この問題点は 後述する
+  - メリット:
+    - 長命側トークンであれば失効が可能
+      - 永続的なトークン奪取リスクを低減
+    - 短命側トークンが 盗まれた場合のリスクは残る
+      - ただし 短命であるため リスクは できるだけ低減
+    - 双方ともに CSRF 対策が不要
+  - デメリット:
+    - 短命側トークン 及び 長命側トークンが JavaScript からアクセス可能であるため
+      - 永続的なトークン奪取リスクが残る
+      - 特に 長命側トークンは 永続的に奪取されるリスクが高い
+    - 悪意ある JavaScript の実行を防ぐ対策が重要
+  - 具体的なライブラリ
+    - Auth0 SDK: auth0-spa-js (リフレッシュトークン利用)
+      - https://authjs.dev/concepts/session-strategies#jwt-session
+      - `useRefreshTokens: true` オプションを指定することで対応可能
+      - 以下のような対応
+        - 短命 assertion 型トークン = アクセストークン (JWT)
+        - 長命 handle 型トークン = リフレッシュトークン (ランダム文字列)
+        - トークンはそれぞれ メモリに保存されるが 指定が可能
+      - トークン自体の発行は API サーバではなく 外部の Auth0 サーバが担当する
+      - API サーバが アクセストークンを受け取り それを検証する
+        - 検証の手順を間違えると 脆弱性を招くリスクがあるため 注意が必要
+        - これは 4 位の B on β と同様
+  - 余談: B on β との 比較と 同率とした理由
+    - B on β の場合、assertion 型トークン しか存在しないため トークンを奪取されると永続的にアクセスされる
+    - ただし C on β も 長命 handle 型 トークンが 奪取された場合は 同等のリスク
+    - どちらの手法も β であるため、
+      - どのみち 悪意ある JavaScript による トークン奪取による 永続的アクセスのリスクが存在する
+      - assertion 型 トークンの有効期限に左右されるため 一概に比較できない
+      - そのため 同率とした
+      - 逆に言えば、B on β において assertion 型トークンを 短命に設定している場合、
+        - C on β よりも安全といえる可能性もある
 - 非推奨 1: B on non-httponly cookie
   - assertion 型トークン on httponly でないクッキー
   - JavaScript からアクセス可能であるため β の手法と同様の欠点を持つ
