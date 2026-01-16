@@ -316,7 +316,7 @@ SPA + API のセキュリティについて、包括的に学習を深めてい�
     - 詳しくは 以前の記事を参照
       - 【OAuth】アクセストークンの検証を誤ると成りすまし攻撃ができます
       - https://zenn.dev/calloc134/articles/oauth-cross-api-vuln-attack
-- 4 位: B on β
+- 同率 4 位: B on β
   - assertion 型トークン on ブラウザストレージやメモリ
   - SPA で よく利用される手法だが 安全性は低い
   - メリット:
