@@ -276,15 +276,18 @@ published: false
 - 今回の構成の前提
   - SPA と API が 完全別ドメインに存在
   - API サーバは JSON を受け取り JSON を返すことを前提
-    - つまり JSON 形式以外の リクエストボディは受け付けない
-    - そのため HTML フォームを送信するような 昔ながらの CSRF 攻撃は想定しない
-- 想定される
+    - つまり JSON 形式 `application/json` の リクエストボディ しか受け付けない
+    - そのため HTML フォーム を送信するような 昔ながらの CSRF 攻撃は想定しない
+      - `application/x-www-form-urlencoded`
+      - `multipart/form-data`
+      - `text/plain`
+    - これらのコンテンツタイプは そもそも API サーバで拒否することを前提とする (後述)
 - この場合の CSRF 脅威 と 対策について
   - 攻撃者サーバ が 提供する JavaScript を 被害者のブラウザ上で 実行させる
     - 例:
       - 1. 被害者が 攻撃者サーバ にアクセス
       - 2. 攻撃者サーバ が 提供する JavaScript が 被害者のブラウザ上で 実行される
-      - 3. 悪意ある JavaScript が fetch API などを用いて API サーバ に リクエストを送信
+      - 3. 悪意ある JavaScript が fetch API などを用いて API サーバ に リクエストを送信 (credentials: "include" を指定)
       - 4. ブラウザが 自動的に クッキーを送信
       - 5. API サーバが リクエストを処理し 副作用のある操作を実行
 - これに対してどのように防御するか
@@ -321,7 +324,10 @@ published: false
         - という動作を実現
       - CORS 設定を適用した際の動作
         - CORS 設定を適用した際の動作も学習しておくと良い
-        - 副作用のある API(safe method):
+        - 副作用のある API (unsafe method)の場合:
+          - unsafe method = POST, PUT, PATCH, DELETE など
+            - unsafe method の場合でも かならず 以下の流れになる訳ではない
+            - 詳細は後述
           - fetch API などで unsafe method を送信しようとすると
           - まずブラウザが プリフライトリクエスト (OPTIONS メソッド) を送信
           - API サーバが プリフライトリクエストに対して
@@ -330,7 +336,16 @@ published: false
           - JavaScript(fetch API など) が エラーとなり 本リクエストを送信しない
           - API サーバが レスポンスを返す
           - これにより「実行させない」ことを実現
-        - 副作用のない API(unsafe method):
+          - なお、unsafe method であっても
+            - 特定の条件下では プリフライトリクエストが送信されない場合がある
+            - 例えば コンテンツタイプが フォーム送信
+              - `application/x-www-form-urlencoded`
+              - `multipart/form-data`
+              - `text/plain`
+            - の場合など
+            - これらのケースは今回の攻撃想定 とはズレるため ここでは解説しない
+            - 今回の解説では これらのケースをブロックすることを前提とする (後述)
+        - 副作用のない API (safe method)の場合:
           - ブラウザが 直接 本リクエスト (safe method) を送信
           - API サーバが レスポンスを返す
             - このとき ヘッダに CORS ポリシー情報を含む
@@ -344,7 +359,7 @@ published: false
       - CORS ポリシーは ブラウザが自主的に fetch API などの動作を制限する仕組みである
         - それに対し、API サーバ側でも 検証を行うことで
         - より確実に CSRF 攻撃を防げる
-      - fetch API などを用いて unsafe method を送信する場合
+      - fetch API などを用いて リクエストを送信する場合
         - ブラウザが 自動的に `Origin` ヘッダ を付与する
         - `Origin` ヘッダとは
           - リクエストが どのオリジン (ドメイン) から送信されたかを示すヘッダ
@@ -356,16 +371,32 @@ published: false
           - 攻撃者サーバ (悪意あるサイト) から 行われる API へのアクセスは 拒否される
         - という動作を実現
       - 余談: 古いブラウザでは `Origin` ヘッダ が付与されない場合があるため
+        - その場合は `Referer` ヘッダ も検証すると良い
+        - `Referer` ヘッダ とは
+          - リクエストが どの URL から送信されたかを示すヘッダ
+        - `Referer` ヘッダ も SPA (正規のサイト) のオリジンのみを allowlist に登録し
+        - リクエストが 来た際に `Referer` ヘッダ の値を検証
+        - 古いブラウザに対応する場合の処理の流れ
+          - 1. まず `Origin` ヘッダ を検証
+          - 2. `Origin` ヘッダ が存在しない場合は `Referer` ヘッダ を検証
+          - 3. どちらも allowlist に登録されていないオリジンからの リクエストは拒否
     - 追加: コンテンツタイプが `application/json` となっているかのチェック
-      - 昔ながらの フォーム起点の CSRF 攻撃を防ぐ
-        - 今回の 攻撃想定 とはズレるが 一応 対策しておくと良い
+      - 以下のコンテンツタイプをすべて 拒否することができる
+        - `application/x-www-form-urlencoded`
+        - `multipart/form-data`
+        - `text/plain`
+        - コンテンツタイプの欠落
+      - 昔ながらの CSRF 攻撃を防ぐ対策として有効
+        - 今回の 攻撃想定 と異なる CSRF 攻撃について すべて防ぐことができる
         - ただし 自前でミドルウェアを実装する必要あり
     - 余談: SameSite 属性は 利用できない
       - 今回は SPA と API が 完全別ドメインに存在するため
-      - SameSite 属性を `None` に設定する必要がある
-      - SameSite 属性を `Lax` や `Strict` に設定すると
-      - ブラウザが クッキーを送信できなくなるため
+        - SameSite 属性を `None` に設定する必要がある
+        - SameSite 属性を `Lax` や `Strict` に設定すると
+        - ブラウザが クッキーを送信できなくなるため
       - CSRF 防御策としては 利用できない
+      - なお、SameSite 属性が `None` の場合
+        - Secure 属性を付与する必要があることに注意
 
   - 注意点: `hono/csrf` ミドルウェアは SPA + API 構成 においてあまり効果がない
     - SPA + API 構成の場合 `application/json` の リクエストボディ しか受け付けない場合が多い
