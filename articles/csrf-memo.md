@@ -186,21 +186,51 @@ CSRF・XS-Leak攻撃対策について、以下のメモを作成しています
   - 特に対策は不要
   - ただし多重防御を考えるのであれば 以下を追加してもよい
     - Origin検証
-      - Origin ヘッダは 同一ドメインの場合は同一オリジンだが
-      - unsafe methods (POST, PUT, DELETE など) の場合は基本送信される
+      - unsafe methodの場合 Origin ヘッダは送信される
+      - 検証の手順は 完全別ドメイン SPA + JSONAPI の場合と同じ
 - safe methods(副作用なし) な JSON API に対する XS-Leak攻撃
   - CORS ポリシーがなく厳密に管理されており
   - また SameSite=Lax により 異なるサイト間でのクッキー送信が防止されるため
   - 特に対策は不要
-  - Origin ヘッダは 同一ドメインの場合は同一オリジンであり
-  - さらに safe methodの場合 Origin ヘッダが送信されないことがある
-    - そのため検証は不要
-    - 副作用ありのAPIと合わせて「Originヘッダがあれば検証する」という運用にしてもよい
+  - ただし多重防御を考えるのであれば 以下を追加してもよい
+    - Origin検証
+      - もし Origin ヘッダが存在すれば検証する
+      - Origin ヘッダは 同一ドメインの場合は同一オリジンであり
+      - さらに safe methodの場合 Origin ヘッダが送信されないことがある
+      - そのため 「もし Origin ヘッダが存在すれば検証する」 という方針とする
 - フォーム送信によるCSRF攻撃
   - SameSite=Lax により 異なるサイト間でのクッキー送信が防止されるため
   - 特に対策は不要
   - ただし多重防御を考えるのであれば 以下を追加してもよい
     - Origin検証 (API側)
       - Origin ヘッダは 同一ドメインの場合は基本送信される
+      - 検証の手順は 完全別ドメイン SPA + JSONAPI の場合と同じ
     - application/json 以外のContent-Type の拒否 (API側)
-      - 完全別ドメイン SPA + JSONAPI の場合と同じ
+      - 検証の手順は 完全別ドメイン SPA + JSONAPI の場合と同じ
+
+## サブドメイン からの CSRF攻撃
+
+- サブドメインからのCSRF攻撃とは
+  - 別オリジン
+  - 同一サイト
+    - 例: api.example.com と app.example.com
+
+- unsafe methods(副作用あり) な JSON API に対する CSRF攻撃
+  - CORS ポリシーがなく厳密に管理されているが
+  - SameSite=Lax により 同一サイト間でのクッキー送信が許可されるため
+  - CSRF攻撃が成立する可能性がある
+  - したがって 完全別ドメインからのCSRF攻撃の場合と同じ対策を適用する
+  - Origin検証 (API側での検証)
+    - 検証の手順は 完全別ドメイン SPA + JSONAPI の場合と同じ
+- safe methods(副作用なし) な JSON API に対する XS-Leak攻撃
+  - CORS ポリシーがなく厳密に管理されているが
+  - SameSite=Lax により 同一サイト間でのクッキー送信が許可されるため
+  - XS-Leak攻撃が成立する可能性がある
+- フォーム送信によるCSRF攻撃
+  - SameSite=Lax により 同一サイト間でのクッキー送信が許可されるため
+  - CSRF攻撃が成立する可能性がある
+  - したがって 完全別ドメインからのCSRF攻撃の場合と同じ対策を適用する
+  - Origin検証 (API側)
+    - 検証の手順は 完全別ドメイン SPA + JSONAPI の場合と同じ
+  - application/json 以外のContent-Type の拒否 (API側での検証)
+    - 検証の手順は 完全別ドメイン SPA + JSONAPI の場合と同じ
