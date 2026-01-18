@@ -113,11 +113,12 @@ CSRF攻撃対策について、以下のメモを作成しています。
     - したがってAPIでは これらの Content-Type のリクエストを拒否する
     - API は `application/json` のみを許可する
   - 余談: CORSポリシーは関係ない
-    - フォーム送信は ブラウザのネイティブ機能であり simple request に分類されるため
+    - フォーム送信は ブラウザのネイティブ機能であるため
     - ブラウザは CORSポリシーを確認せず 直接リクエストを送信する
     - そのため CORSポリシーでは フォーム送信によるCSRF攻撃を防止できない
   - 余談: CORSにおける `Access-Control-Allow-Credentials` は関係ない
-    - このパラメータは fetch API などの JavaScript によるリクエスト送信にのみ影響するため フォーム送信には影響しない
+    - 前述の通り フォーム送信は ブラウザのネイティブ機能であるため
+    - ブラウザは CORSポリシーを確認せず 直接リクエストを送信する
     - そのため `Access-Control-Allow-Credentials` では フォーム送信によるCSRF攻撃を防止できない
 
 # 同一ドメイン SPA + JSONAPI の場合のCSRF対策
