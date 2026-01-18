@@ -10,34 +10,35 @@ CSRF攻撃対策について、以下のメモを作成しています。
 完全別ドメインでのCSRFの対策です。これについてファクトチェックしてください。
 また、サブドメイン・同一ドメインの場合のCSRF対策についても同等に説明してください。
 
-
 # 大前提
 
 - データを変更するAPI (副作用あり) と データを取得するAPI (副作用なし) で メソッドを分離する
   - API 設計の段階で考慮する
   - データを変更するAPI (副作用あり)
     - POST, PUT, DELETE など
+    - これらのメソッドは unsafe methods と呼ばれる
   - データを取得するAPI (副作用なし)
     - GET, HEAD, OPTIONS など
+    - これらのメソッドは safe methods と呼ばれる
 
 # 別ドメイン SPA + JSONAPI の場合のCSRF対策
 
-原則
+- 原則
+  - APIにはクッキーを含めて送信する必要がある
+  - クッキー
+    - SameSite=None
+    - HttpOnly
+    - Secure
+  - 別ドメイン
+    - 別オリジン
+    - 別サイト
+  - CORS
+    - credentials include
+    - フロントエンド オリジンのみ許可
 
-- 副作用あるなしの分離
-- APIにはクッキーを含めて送信する必要がある
-- クッキー
-  - SameSite=None
-  - HttpOnly
-  - Secure
-- 別ドメイン
-  - 別オリジン
-  - 別サイト
-- CORS
-  - credentials include
-  - フロントエンド オリジンのみ許可
+## 別ドメインからの CSRF 攻撃
 
-- JSONAPIによるCSRF 副作用あり
+- unsafe methods(副作用あり) な JSON API に対する CSRF攻撃
   - Origin検証 (API側)
     - Origin ヘッダは 別ドメインの場合は 別オリジンなので
     - 基本送信される
@@ -55,7 +56,7 @@ CSRF攻撃対策について、以下のメモを作成しています。
       - 2. サーバーがCORSポリシーを含むレスポンスを返す
       - 3. ブラウザがレスポンスを確認し オリジンが`*` かつ credentials include であるかをチェック
       - 4. 両立する場合 送信をブロック
-- JSONAPI によるCSRF 副作用なし
+- safe methods(副作用なし) な JSON API に対する CSRF攻撃
   - Origin検証 (API側)
     - Origin ヘッダは 別ドメインの場合は 別オリジンなので
     - 基本送信される
@@ -88,6 +89,46 @@ CSRF攻撃対策について、以下のメモを作成しています。
     - このパラメータは fetch API や XMLHttpRequest に関するものであり
     - フォーム送信には影響しない
     - ブラウザはフォーム送信時にクッキーを自動的に含める
+
+# 同一ドメイン SPA + JSONAPI の場合のCSRF対策
+
+- 原則
+  - APIにはクッキーを含めて送信する必要がある
+  - クッキー
+    - SameSite=Lax
+    - HttpOnly
+    - Secure
+  - 同一ドメイン
+    - 同一オリジン
+    - 同一サイト
+  - CORS
+    - credentials include
+    - フロントエンド オリジンのみ許可
+- JSONAPI によるCSRF 副作用あり
+  - CORS ポリシーがなく厳密に管理されており
+  - また SameSite=Lax により クロスサイト間でのクッキー送信が防止されるため
+  - 特に対策は不要
+  - ただし多重防御を考えるのであれば 以下を追加してもよい
+    - Origin検証
+      - Origin ヘッダは 同一ドメインの場合は同一オリジンだが
+      - unsafe methods (POST, PUT, DELETE など) の場合は基本送信される
+- JSONAPI によるCSRF 副作用なし
+  - CORS ポリシーがなく厳密に管理されており
+  - また SameSite=Lax により クロスサイト間でのクッキー送信が防止されるため
+  - 特に対策は不要
+  - Origin ヘッダは 同一ドメインの場合は同一オリジンであり
+    - さらに safe methodの場合 Origin ヘッダが送信されないことがある
+    - そのため検証は不要
+    - 副作用ありのAPIと合わせて「Originヘッダがあれば検証する」という運用にしてもよい
+- フォームによるCSRF 副作用あり
+  - SameSite=Lax により クロスサイト間でのクッキー送信が防止されるため
+  - 特に対策は不要
+  - ただし多重防御を考えるのであれば 以下を追加してもよい
+    - Origin検証 (API側)
+      - Origin ヘッダは 同一ドメインの場合は基本送信される
+    - application/json 以外のContent-Type の拒否 (API側)
+      - フォーム送信は application/x-www-form-urlencoded または multipart/form-data になる
+  -
 
 # サブドメイン SPA + JSONAPI の場合のCSRF対策
 
@@ -134,42 +175,7 @@ CSRF攻撃対策について、以下のメモを作成しています。
       - 3. ブラウザがレスポンスを確認し オリジンが`*` かつ credentials include であるかをチェック
       - 4. 両立する場合 レスポンスがアプリケーションに渡されず 疎通をブロック
 - フォームによるCSRF 副作用あり
-  - SameSite=Lax により クッキーは送信されないため
-  - 特に対策は不要
-  - ただし多重防御を考えるのであれば 以下を追加してもよい
-    - Origin検証 (API側)
-      - Origin ヘッダは サブドメインの場合は 別オリジンなので
-      - 基本送信される
-    - application/json 以外のContent-Type の拒否 (API側)
-      - フォーム送信は application/x-www-form-urlencoded または multipart/form-data になる
+  - SameSite=Lax だが サブドメインは同一サイトとなるため対策が必要
+  - 別ドメインの フォームによるCSRF 副作用あり と同じ対策を行う
 
 (ここに内容を記述)
-
-# 同一ドメイン SPA + JSONAPI の場合のCSRF対策
-
-- 基本的には サブドメイン と同じ対策を行う
-- 同一オリジンとなったため 該当箇所に変更を加える
-- クッキー
-  - SameSite=Lax
-- JSONAPI によるCSRF 副作用あり
-  - CORS ポリシーがなく厳密に管理されているため
-  - 特に対策は不要
-  - ただし多重防御を考えるのであれば 以下を追加してもよい
-    - Origin検証
-      - Origin ヘッダは 同一ドメインの場合は同一オリジンだが
-      - unsafe methods (POST, PUT, DELETE など) の場合は基本送信される
-- JSONAPI によるCSRF 副作用なし
-  - CORS ポリシーがなく厳密に管理されているため
-  - 特に対策は不要
-  - Origin ヘッダは 同一ドメインの場合は同一オリジンであり
-    - さらに safe methods (GET, HEAD, OPTIONS など) の場合は基本送信されない
-    - そのため検証は不要
-- フォームによるCSRF 副作用あり
-  - SameSite=Lax により クッキーは送信されないため
-  - 特に対策は不要
-  - ただし多重防御を考えるのであれば 以下を追加してもよい
-    - Origin検証 (API側)
-      - Origin ヘッダは 同一ドメインの場合は基本送信される
-    - application/json 以外のContent-Type の拒否 (API側)
-      - フォーム送信は application/x-www-form-urlencoded または multipart/form-data になる
-  -
