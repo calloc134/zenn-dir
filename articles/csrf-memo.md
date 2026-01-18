@@ -7,8 +7,7 @@ published: false
 ---
 
 CSRF攻撃対策について、以下のメモを作成しています。
-完全別ドメインでのCSRFの対策です。これについてファクトチェックしてください。
-また、サブドメイン・同一ドメインの場合のCSRF対策についても同等に説明してください。
+ファクトチェックしてください。
 
 # 大前提
 
@@ -33,62 +32,93 @@ CSRF攻撃対策について、以下のメモを作成しています。
     - 別オリジン
     - 別サイト
   - CORS
-    - credentials include
+    - fetch API において クレデンシャルを含める設定を許容する
+      - fetch API の `credentials` パラメータを `include` に設定するオプションを許可する
+      - `Access-Control-Allow-Credentials` を `true` に設定
     - フロントエンド オリジンのみ許可
+      - `Access-Control-Allow-Origin` を フロントエンドのオリジンに設定
+- SPA と API が 別ドメインなので
+  - クッキーの防御機構は利用できない
+  - そもそもクッキーの防御機構は CSRF攻撃においては副次的な防御機構である
+  - より本質的な対策が必要
 
 ## 別ドメインからの CSRF 攻撃
 
 - unsafe methods(副作用あり) な JSON API に対する CSRF攻撃
   - Origin検証 (API側)
-    - Origin ヘッダは 別ドメインの場合は 別オリジンなので
-    - 基本送信される
+    - Origin ヘッダは 別ドメインの場合は 別オリジンなので 基本送信される
+    - API は クライアントから送信された Origin ヘッダを検証し
+    - 許可されたオリジンからのリクエストのみを受け入れる
   - CORSポリシーにオリジンが含まれるか (ブラウザ側)
-    - プリフライトリクエストで送信をブロック
+    - CORSポリシーを適切に設定することで ブラウザがリクエストの送信をブロックしてくれる
+    - unsafe method の場合、本リクエストを送信する前に プリフライトリクエストが送信される
+      - 本リクエスト送信前に ブラウザが CORSポリシーを確認するために プリフライトリクエストを送信する
+      - プリフライトリクエストは OPTIONS メソッドで送信される
+      - プリフライトリクエストに対するレスポンスに CORSポリシーが含まれる
     - 処理の流れ
-      - 1. ブラウザがプリフライトリクエストを送信
-      - 2. サーバーがCORSポリシーを含むレスポンスを返す
-      - 3. ブラウザがレスポンスを確認し CORSポリシーにオリジンが含まれるかをチェック
-      - 4. オリジンが含まれない場合 送信をブロック
-  - CORSポリシーのオリジンが`*` の場合 credentials include でないか (ブラウザ側)
-    - `*` と credentials include が両立する場合 送信をブロック
+      - 1. ブラウザの JavaScriptが fetch APIを用いて unsafe method のリクエストを送信しようとする
+      - 2. ブラウザがプリフライトリクエストを送信
+        - OPTIONS メソッド
+      - 3. サーバーがCORSポリシーを含むレスポンスを返す
+      - 4. ブラウザがレスポンスを確認し CORSポリシーにオリジンが含まれるかをチェック
+        - `Access-Control-Allow-Origin` ヘッダを確認
+      - 5. オリジンが含まれない場合 送信をブロックし その時点で fetch API がエラーを返す
+  - 余談: CORS ポリシーのオリジン設定 最低限制約
+    - `Access-Control-Allow-Origin` ヘッダに ワイルドカード `*` を設定している場合
+    - `Access-Control-Allow-Credentials` ヘッダが `true` に設定されていても
+    - ブラウザはクレデンシャルを含めてリクエストを送信せず すべてエラーにする
     - 処理の流れ
-      - 1. ブラウザがプリフライトリクエストを送信
-      - 2. サーバーがCORSポリシーを含むレスポンスを返す
-      - 3. ブラウザがレスポンスを確認し オリジンが`*` かつ credentials include であるかをチェック
-      - 4. 両立する場合 送信をブロック
+      - 1. ブラウザの JavaScriptが fetch APIを用いて unsafe method のリクエストを送信しようとする
+      - 2. ブラウザがプリフライトリクエストを送信
+        - OPTIONS メソッド
+      - 3. サーバーがCORSポリシーを含むレスポンスを返す
+      - 4. ブラウザがレスポンスを確認し CORSポリシーが制約に違反しているかをチェック
+        - オリジンが`*` かつ `Access-Control-Allow-Credentials` ヘッダが `true` であるかをチェック
+      - 5. 両立する場合 送信をブロックし その時点で fetch API がエラーを返す
 - safe methods(副作用なし) な JSON API に対する CSRF攻撃
   - Origin検証 (API側)
-    - Origin ヘッダは 別ドメインの場合は 別オリジンなので
-    - 基本送信される
+    - Origin ヘッダは 別ドメインの場合は 別オリジンなので 基本送信される
+    - API は クライアントから送信された Origin ヘッダを検証し
+    - 許可されたオリジンからのリクエストのみを受け入れる
     - JSONAPI によるCSRF 副作用ありの場合と同じ
   - CORSポリシーにオリジンが含まれるか (ブラウザ側)
     - そもそもの疎通をブロック
     - 処理の流れ
-      - 1. ブラウザがリクエストを送信
-      - 2. サーバーがCORSポリシーを含むレスポンスを返す
-      - 3. ブラウザがレスポンスを確認し CORSポリシーにオリジンが含まれるかをチェック
-      - 4. オリジンが含まれない場合 レスポンスがアプリケーションに渡されず 疎通をブロック
-  - CORSポリシーのオリジンが`*` の場合 credentials include でないか (ブラウザ側)
-    - `*` と credentials include が両立する場合 疎通をブロック
+      - 1. JavaScriptが fetch APIを用いて safe method のリクエストを送信しようとする
+      - 2. ブラウザがリクエストを送信
+      - 3. サーバーがCORSポリシーを含むレスポンスを返す
+      - 4. ブラウザがレスポンスを確認し CORSポリシーにオリジンが含まれるかをチェック
+        - `Access-Control-Allow-Origin` ヘッダを確認
+      - 5. オリジンが含まれない場合 レスポンスがJavaScriptに渡されず その時点で fetch API がエラーを返す
+  - 余談: CORS ポリシーのオリジン設定 最低限制約
+    - `Access-Control-Allow-Origin` ヘッダに ワイルドカード `*` を設定している場合
+    - `Access-Control-Allow-Credentials` ヘッダが `true` に設定されていても
+    - ブラウザはクレデンシャルを含めてリクエストを送信せず すべてエラーにする
     - 処理の流れ
-      - 1. ブラウザがリクエストを送信
-      - 2. サーバーがCORSポリシーを含むレスポンスを返す
-      - 3. ブラウザがレスポンスを確認し オリジンが`*` かつ credentials include であるかをチェック
-      - 4. 両立する場合 レスポンスがアプリケーションに渡されず 疎通をブロック
-- フォームによるCSRF 副作用あり
+      - 1. JavaScriptが fetch APIを用いて safe method のリクエストを送信しようとする
+      - 2. ブラウザがリクエストを送信
+      - 3. サーバーがCORSポリシーを含むレスポンスを返す
+      - 4. ブラウザがレスポンスを確認し CORSポリシーが制約に違反しているかをチェック
+        - オリジンが`*` かつ `Access-Control-Allow-Credentials` ヘッダが `true` であるかをチェック
+      - 5. 両立する場合 レスポンスがJavaScriptに渡されず その時点で fetch API がエラーを返す
+- フォーム送信によるCSRF攻撃
   - Origin検証 (API側)
     - Origin ヘッダは 別ドメインの場合は送信される
     - JSONAPIによるCSRF 副作用ありの場合と同じ
   - application/json 以外のContent-Type の拒否 (API側)
-    - フォーム送信は application/x-www-form-urlencoded または multipart/form-data になる
+    - フォーム送信は 以下のContent-Type になる
+      - `application/x-www-form-urlencoded`
+      - `multipart/form-data`
+      - `text/plain`
+    - したがってAPIでは これらの Content-Type のリクエストを拒否する
+    - API は `application/json` のみを許可する
   - 余談: CORSポリシーは関係ない
-    - simple requestとして扱われるため
-    - ブラウザはCORSポリシーをフォーム送信には適用しない
-    - プリフライトリクエストも発生せず送信もブロックされない
-  - 余談: credentials include は関係ない
-    - このパラメータは fetch API や XMLHttpRequest に関するものであり
-    - フォーム送信には影響しない
-    - ブラウザはフォーム送信時にクッキーを自動的に含める
+    - フォーム送信は ブラウザのネイティブ機能であり simple request に分類されるため
+    - ブラウザは CORSポリシーを確認せず 直接リクエストを送信する
+    - そのため CORSポリシーでは フォーム送信によるCSRF攻撃を防止できない
+  - 余談: CORSにおける `Access-Control-Allow-Credentials` は関係ない
+    - このパラメータは fetch API などの JavaScript によるリクエスト送信にのみ影響するため フォーム送信には影響しない
+    - そのため `Access-Control-Allow-Credentials` では フォーム送信によるCSRF攻撃を防止できない
 
 # 同一ドメイン SPA + JSONAPI の場合のCSRF対策
 
