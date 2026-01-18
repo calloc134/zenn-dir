@@ -29,7 +29,7 @@ CSRF・XS-Leak攻撃対策について、以下のメモを作成しています
     - SameSite=None
     - HttpOnly
     - Secure
-  - 別ドメイン
+  - SPA と API は 完全別ドメイン
     - サブドメインでもない
     - 別オリジン
     - 別サイト
@@ -148,10 +148,12 @@ CSRF・XS-Leak攻撃対策について、以下のメモを作成しています
 
 - サブドメインからのCSRF攻撃とは
   - 別オリジン
-    - 例: api.example.com と app.example.com
   - 同一サイト
-- サブドメインの場合は 別ドメインの一種であるため
-- 完全別ドメインからのCSRF攻撃の場合と同じ対策を適用する
+    - 例: api.example.com と app.example.com
+- 今回は SameSite=None を使用しているため
+  - サブドメイン特有の
+    - 「同一サイトである」ことによる差分は発生しない
+- したがって 完全別ドメインからのCSRF攻撃の場合と同じ対策を適用する
 
 # 同一ドメイン SPA + JSONAPI の場合のCSRF対策
 
@@ -161,7 +163,7 @@ CSRF・XS-Leak攻撃対策について、以下のメモを作成しています
     - SameSite=Lax
     - HttpOnly
     - Secure
-  - 同一ドメイン
+  - SPA と API は 完全同一ドメイン
     - 同一オリジン
     - 同一サイト
   - CORS
