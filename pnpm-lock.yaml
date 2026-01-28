@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       zenn-cli:
-        specifier: ^0.2.11
-        version: 0.2.11
+        specifier: ^0.4.3
+        version: 0.4.3
 
 packages:
 
@@ -48,6 +48,9 @@ packages:
     resolution: {integrity: sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA==}
     engines: {node: '>=18'}
 
+  package-manager-detector@1.6.0:
+    resolution: {integrity: sha512-61A5ThoTiDG/C8s8UMZwSorAGwMJ0ERVGj2OjoW5pAalsNOg15+iQiPzrLJ4jhZ1HJzmC2PIHT2oEiH3R5fzNA==}
+
   run-applescript@7.1.0:
     resolution: {integrity: sha512-DPe5pVFaAsinSaV6QjQ6gdiedWDcRCbUuiQfQa2wmWV7+xC9bGulGI8+TdRmoFkAPaBXk8CrAbnlY2ISniJ47Q==}
     engines: {node: '>=18'}
@@ -56,8 +59,8 @@ packages:
     resolution: {integrity: sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw==}
     engines: {node: '>=18'}
 
-  zenn-cli@0.2.11:
-    resolution: {integrity: sha512-xxe2TBVKPMcYL2VmBd2TfJy5UdlVbJiHgttXe2/q+TRuR2548H4iNSc0O7LMWmEyi+hFtsGbWE2yYN8/Ea48NA==}
+  zenn-cli@0.4.3:
+    resolution: {integrity: sha512-biZx3jkDIZCk4sfGADmnHxBS0ksShyyM5d8Ubo4nnj6lFQzqanNgkSnjcz1njY8rF3q1tk1d2ZLu+ipgUxdCzQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -93,12 +96,15 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
+  package-manager-detector@1.6.0: {}
+
   run-applescript@7.1.0: {}
 
   wsl-utils@0.1.0:
     dependencies:
       is-wsl: 3.1.0
 
-  zenn-cli@0.2.11:
+  zenn-cli@0.4.3:
     dependencies:
       open: 10.2.0
+      package-manager-detector: 1.6.0
