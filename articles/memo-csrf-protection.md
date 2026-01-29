@@ -21,6 +21,60 @@ CSRF・XS-Leak攻撃対策について、以下のメモを作成しています
     - GET, HEAD, OPTIONS など
     - これらのメソッドは safe methods と呼ばれる
 
+# 全体メモ
+
+SPA + API構成におけるCSRF攻撃について考察を行います。
+API側では httponlyクッキーを利用し、クッキーが存在していないとAPI呼び出しが行えないものとします。
+正規の用途では、fetch apiにおいて credentials: includeを設定した呼び出しを想定します。
+
+CSRF攻撃の防御の一番根本的解決はOriginヘッダ検証です。
+しかし今回は、Originヘッダ検証を怠った場合、つまりOriginヘッダ検証のない場合において、
+CookieのSameSite属性や CORSポリシーによる CSRF攻撃の副次的防御の影響について考察します。
+
+横軸→被害者に踏ませるための攻撃者のページ
+縦軸→本来のSPAページ
+
+また、
+SameSite属性によるCSRF耐性 → A
+CORSポリシーによるCSRF耐性 → B
+
+余談: 完全同一ドメイン or サブドメインの場合はSameSite=Laxを明示的に設定するものとする。完全別ドメインの場合はSameSite=Noneを明示的に設定するものとする。
+
+## α. 攻撃者ページからの fetch apiを用いた unsafe methodによるCSRF
+
+こちらはsimple requestとは認識されない。
+
+| ＼ | サブドメイン(ただし本家とは別のサブドメインとする) | 完全別ドメイン |
+| 完全同一ドメイン SameSite=Lax | B | A,B |
+| サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | B | A, B |
+| 完全別ドメイン SameSite=none Access-Control-Allow-Credentials有 | B | B |
+
+## β. text/plain等の simple requestと認識されるコンテンツタイプを用いた POSTでJSONデータを無理やり送信させるタイプの CSRF
+
+ここでは、一番想定される例として コンテンツタイプ例にtext/plainを提示した。
+ただし、API側が受理するのであれば、multipart/form-data または application/x-www-form-urlencoded もこちらの分類に含まれる。
+simple requestと認識されるリクエストの送信は、攻撃者ページからのフォーム送信 もしくは fetch apiのどちらでもあり得る
+余談: この攻撃方法は API側が application/json以外のコンテンツを受理するということが原因になるので、この点を防げばそもそも発生しない。
+
+| ＼ | サブドメイン(ただし本家とは別のサブドメインとする) | 完全別ドメイン |
+| 完全同一ドメイン SameSite=Lax | なし | A |
+| サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | なし | A |
+| 完全別ドメイン SameSite=none Access-Control-Allow-Credentials有 | なし | なし |
+
+## γ. 攻撃者ページからのfetch apiを用いたsafe methodによるデータ漏えい
+
+この場合はsafe methodなので、CORSの防衛ラインの軸足が
+「APIを呼び出さない」から「API呼び出しは許容するがそのデータは閲覧できない」に 変化することに注意
+
+| ＼ | サブドメイン(ただし本家とは別のサブドメインとする) | 完全別ドメイン |
+| 完全同一ドメイン SameSite=Lax | B | A,B |
+| サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | B | A, B |
+| 完全別ドメイン SameSite=none Access-Control-Allow-Credentials有 | B | B |
+
+(余談1: safe methodでも副作用が発生するような場合、CORSではサイトのデータ取得は防がれるものの、APIへのアクセスは防がれない。そのため、safe methodで副作用を行うAPIが存在している場合、CSRFが可能になる)
+(余談2: CORSで `*` で指定するのは避ける。そもそも`*` で指定している場合だとallow credentialsが許可されないので正常な通信が上手くいかなくなるというフェイルセーフな仕組みが存在している。裏を返せば、CORSで`*` を設定し、かつ credentials includeなしで叩けるAPIが存在すれば、CSRF攻撃およびXS-Leakに脆弱ということになってしまう)
+(余談3: Originヘッダは、同一オリジン = 完全同一ドメインでsafe methodの場合のみ付属しないという特徴がある。これは、完全同一ドメインかつsafe methodの場合 CSRF攻撃の危険性が極めて少なく、心配する必要がないと判断されるからである)
+
 # 完全別ドメイン SPA + JSONAPI の場合のCSRF・XS-Leak 対策
 
 - 原則
