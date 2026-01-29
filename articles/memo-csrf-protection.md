@@ -38,7 +38,7 @@ CookieのSameSite属性や CORSポリシーによる CSRF攻撃の副次的防�
 SameSite属性によるCSRF耐性 → A
 CORSポリシーによるCSRF耐性 → B
 
-余談: 完全同一ドメイン or サブドメインの場合はSameSite=Laxを明示的に設定するものとする。完全別ドメインの場合はSameSite=Noneを明示的に設定するものとする。
+余談: 完全同一ドメイン or サブドメインの場合はSameSite=Laxを明示的に設定するものとする。完全別ドメインの場合はSameSite=Noneを明示的に設定、かつSecure属性も設定するものとする。
 
 ## α. 攻撃者ページからの fetch apiを用いた unsafe methodによるCSRF
 
