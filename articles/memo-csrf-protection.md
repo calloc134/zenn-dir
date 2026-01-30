@@ -9,6 +9,25 @@ published: false
 SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策について、以下のメモを作成しています。
 ファクトチェックしてください。
 
+# 忙しい人向けの結論
+
+hono を利用するベースで解説
+
+- `hono/cors` で正しく CORSポリシーを設定する
+  - ブラウザの 同一オリジンポリシー(SOP) による防御機構を有効にする
+- `hono/csrf` ミドルウェアを利用して Originヘッダ検証を行う
+  - simple request と認識されるリクエストに対して耐性がある
+- クッキーの SameSite属性を適切に設定する
+  - 完全同一ドメイン・サブドメインの場合: SameSite=Lax
+  - 完全別ドメインの場合: SameSite=None + Secure 属性
+  - CSRFとは関係ないが、以下の属性は必ず設定すること
+    - HttpOnly 属性
+    - Secure 属性
+- データを変更するAPI (副作用あり) と データを取得するAPI (副作用なし) で メソッドを分離する
+  - データを変更するAPI (副作用あり): unsafe method (POST, PUT, PATCH, DELETE)
+  - データを取得するAPI (副作用なし): safe method (GET, HEAD, OPTIONS, TRACE)
+- 以上に気をつけて実装すれば CSRFは基本的に防御できる
+
 # 前提知識
 
 - CSRF攻撃・クロスサイト読み取り攻撃 に関する前提知識は非常に多岐に渡る
