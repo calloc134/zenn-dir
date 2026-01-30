@@ -150,9 +150,11 @@ SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策�
             - application/x-www-form-urlencoded
             - multipart/form-data
             - text/plain
+      - この場合のリクエストを simple request と呼ぶ
       - 送信の流れは safe method と同じ
-      - この仕組みは ブラウザが互換性のために備えているレガシーな仕組みである
-      - そのため CSRF攻撃に悪用されるリスクがある
+      - この仕組みは ブラウザが互換性のために備えているレガシーな仕組みであり
+      - セキュリティ上の観点からは望ましくない
+      - もちろん CSRF攻撃に悪用されるリスクがある
       - したがって 開発者は
       - 要件に不要な場合は これらの条件に該当するリクエストを APIで受け入れないようにすることが望ましい
 - SameSite 属性とは
@@ -201,6 +203,7 @@ SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策�
   - fetch apiにおいて credentials: includeを設定した呼び出しを想定する
 - データを変更するAPI (副作用あり) と データを取得するAPI (副作用なし) で メソッドを分離する
   - API 設計の段階で考慮する
+  - メソッド分離の重要性は前述の通り
   - データを変更するAPI (副作用あり)
     - unsafe method を用いる
       - POST, PUT, PATCH, DELETE
@@ -213,41 +216,94 @@ SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策�
   - 完全別ドメインの場合
     - SameSite=None を設定し Secure 属性も設定する
 
-# 全体メモ
+# 根本的解決は Originヘッダ検証
 
-CSRF攻撃の防御の一番根本的解決はOriginヘッダ検証です。
-しかし今回は、Originヘッダ検証を怠った場合、つまりOriginヘッダ検証のない場合において、
-CookieのSameSite属性や CORSポリシーによる CSRF攻撃の副次的防御の影響について考察します。
+- CSRF攻撃の防御の一番根本的解決はOriginヘッダ検証
+- Originヘッダを検証していれば
+  - 完全同一ドメイン・サブドメイン・完全別ドメイン のいずれの場合でも
+  - また unsafe method・safe method のいずれの場合でも
+  - CSRF攻撃を防御できる
+- しかし今回は
+  - Originヘッダ検証を怠った場合
+  - つまりOriginヘッダ検証のない場合において、
+  - CookieのSameSite属性や CORSポリシーによる CSRF攻撃の副次的防御の影響について考察することを目的とする
+
+# Origin ヘッダ検証を怠った場合の CSRF攻撃の成立可否
 
 横軸→被害者に踏ませるための攻撃者のページ
-縦軸→本来のSPAページ
+縦軸→本来の通信元である正規のSPAページ
 
 また、
-SameSite属性によるCSRF耐性 → A
-CORSポリシーによるCSRF耐性 → B
+適切な SameSite属性を設定した際の クッキーの送信挙動によるCSRF耐性 → A
+適切な CORSポリシーを設定した際の 同一オリジンポリシー(SOP) によるCSRF耐性 → B
 
-余談: 完全同一ドメイン or サブドメインの場合はSameSite=Laxを明示的に設定するものとする。完全別ドメインの場合はSameSite=Noneを明示的に設定、かつSecure属性も設定するものとする。
+とする。
 
-## α. 攻撃者ページからの fetch apiを用いた unsafe methodによるCSRF
+## α. 攻撃者ページからの fetch apiを用いた unsafe methodによるCSRF攻撃
 
-こちらはsimple requestとは認識されない。
+攻撃に成功したとされる条件は以下の通り
+
+- 攻撃者ページからの fetch apiを用いた unsafe method によるリクエスト送信が成功すること
+  - 送信自体がブロックされないこと
+
+それぞれの条件において、CSRF攻撃を防御する防御機構が働くかを以下の表に示す。
 
 | ＼ | サブドメイン(ただし本家とは別のサブドメインとする) | 完全別ドメイン |
 | 完全同一ドメイン SameSite=Lax | B | A,B |
 | サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | B | A, B |
 | 完全別ドメイン SameSite=none Access-Control-Allow-Credentials有 | B | B |
 
-## β. text/plain等の simple requestと認識されるコンテンツタイプを用いた POSTでJSONデータを無理やり送信させるタイプの CSRF
+- この表のように
+  - すべての例において 同一オリジンポリシー(SOP) による防御機構 (CORSポリシー) が働くことがわかる
+  - また 本来の通信元である正規のSPAページが完全同一ドメイン・サブドメインであり、かつ 攻撃者ページが完全別ドメインである場合には
+    - クッキーのSameSite属性による防御機構も働くことがわかる
+  - したがって Originヘッダ検証を怠った場合でも
+    - CSRF攻撃は成立しないことがわかる
 
-ここでは、一番想定される例として コンテンツタイプ例にtext/plainを提示した。
-ただし、API側が受理するのであれば、multipart/form-data または application/x-www-form-urlencoded もこちらの分類に含まれる。
-simple requestと認識されるリクエストの送信は、攻撃者ページからのフォーム送信 もしくは fetch apiのどちらでもあり得る
-余談: この攻撃方法は API側が application/json以外のコンテンツを受理するということが原因になるので、この点を防げばそもそも発生しない。
+## β. text/plain等の simple requestと認識されるコンテンツタイプを用いた POSTでJSONデータを無理やり送信させるタイプの CSRF攻撃
+
+攻撃に成功したとされる条件は以下の通り
+
+- 攻撃者ページからの fetch api もしくは フォーム送信を用いた POST によるリクエスト送信が成功すること
+  - 送信自体がブロックされないこと
+
+それぞれの条件において、CSRF攻撃を防御する防御機構が働くかを以下の表に示す。
 
 | ＼ | サブドメイン(ただし本家とは別のサブドメインとする) | 完全別ドメイン |
 | 完全同一ドメイン SameSite=Lax | なし | A |
 | サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | なし | A |
 | 完全別ドメイン SameSite=none Access-Control-Allow-Credentials有 | なし | なし |
+
+- この表のように
+  - 「なし」と示されている部分では、CSRF攻撃を防御する防御機構が働かないことがわかる
+  - したがって CSRF攻撃に脆弱である
+  - なお、本来の通信元である正規のSPAページが完全同一ドメイン・サブドメインであり、かつ 攻撃者ページが完全別ドメインである場合には
+    - クッキーのSameSite属性による防御機構が働くことがわかる
+    - したがって CSRF攻撃は成立しないことがわかる
+
+- ここでは、一番想定される例として コンテンツタイプ例にtext/plainを提示した
+  - ただし API側が以下のコンテンツタイプを受け付ける場合
+  - これらも悪用される可能性がある
+    - multipart/form-data または
+    - application/x-www-form-urlencoded の悪用も同様に考えられる
+- 余談: リクエストの送信手法
+  - 以下の手段が考えられる
+    - フォーム送信
+      - `<form>` タグを用いてフォームを作成し submit() メソッドを呼び出すことで送信
+    - fetch api
+      - fetch apiを用いて text/plain 等の simple requestと認識されるコンテンツタイプを用いたリクエスト送信
+- 余談: この攻撃方法の特徴
+  - API側が application/json以外のコンテンツを受理するということが原因になるので
+  - この点を防げばそもそも発生しない
+  - 前述の通り 開発者は
+    - API の要件に不要な場合は
+    - simple requestと認識されるリクエストを APIで受け入れないようにすることが望ましい
+  - API フレームワークの実装によっては
+    - JSON を受け取る際に 本当にコンテンツタイプが application/json であるかを検証するものもある
+    - しかし、そのような実装になっていない場合も多い
+    - 例: Hono の `c.json()` メソッドはコンテンツタイプを検証しない
+      - パフォーマンスの問題？
+    - 開発者がしっかり自衛を行うことが大事
 
 ## γ. 攻撃者ページからのfetch apiを用いたsafe methodによるデータ漏えい
 
@@ -259,9 +315,24 @@ simple requestと認識されるリクエストの送信は、攻撃者ページ
 | サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | B | A, B |
 | 完全別ドメイン SameSite=none Access-Control-Allow-Credentials有 | B | B |
 
-(余談1: safe methodでも副作用が発生するような場合、CORSではサイトのデータ取得は防がれるものの、APIへのアクセスは防がれない。そのため、safe methodで副作用を行うAPIが存在している場合、CSRFが可能になる)
-(余談2: CORSで `*` で指定するのは避ける。そもそも`*` で指定している場合だとallow credentialsが許可されないので正常な通信が上手くいかなくなるというフェイルセーフな仕組みが存在している。裏を返せば、CORSで`*` を設定し、かつ credentials includeなしで叩けるAPIが存在すれば、CSRF攻撃およびXS-Leakに脆弱ということになってしまう)
-(余談3: Originヘッダは、同一オリジン = 完全同一ドメインでsafe methodの場合のみ付属しないという特徴がある。これは、完全同一ドメインかつsafe methodの場合 CSRF攻撃の危険性が極めて少なく、心配する必要がないと判断されるからである)
+- 余談1:
+  - 副作用の発生するAPI は safe method で実装しないことが重要
+  - safe methodにおいて、同一オリジンポリシー (SOP) の防御機構は
+  - レスポンスの取得に関しては制限するが、リクエストの送信自体は制限しない
+  - そのため、safe method で副作用を発生させるAPIが存在している場合
+  - CSRF攻撃が成立してしまう可能性がある
+- 余談2:
+  - `Access-Control-Allow-Origin` に ワイルドカード `*` を設定し、かつ
+  - `Access-Control-Allow-Credentials` ヘッダが `true` に設定されている場合は
+  - ブラウザは 本リクエストの送信をブロックすることは前述の通りである
+  - ただし、`Access-Control-Allow-Origin` に ワイルドカード `*` を設定してしまっており、かつ
+  - クッキー情報無しでアクセスできるAPIが存在した場合は
+  - クロスサイト読み取り攻撃が成立してしまう可能性があるが
+  - そのようなAPI設計は今回の前提条件に反するため ここでは考慮しない
+- 余談3:
+  - Originヘッダは、同一オリジン = 完全同一ドメインでsafe methodの場合のみ付属しないという特徴がある
+  - これは、完全同一ドメインかつsafe methodの場合 CSRF攻撃の危険性が極めて少なく、心配する必要がないと判断されるからである
+  - したがって、同一オリジンかつsafe methodの場合には Originヘッダ検証を省略することができる
 
 # 完全別ドメイン SPA + JSONAPI の場合のCSRF・XS-Leak 対策
 
