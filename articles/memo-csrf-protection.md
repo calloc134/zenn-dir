@@ -64,15 +64,18 @@ SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策�
       - 一つ左側 であることが重要
       - 例:
         - A: public suffix が ICANN ドメイン
+          - トップレベルドメイン (TLD) であり、レジストラが管理するドメイン
           - (ラベル).com
           - (ラベル).co.uk
         - B: public suffix が 非ICANN ドメイン (PRIVATE ドメイン)
+          - TLDではないが、単一サービスが利用者にサブドメインを提供するドメイン
           - (ラベル).github.io
           - (ラベル).workers.dev
   - 例:
     - https://example.com と https://api.example.com は同一サイト
     - https://example.com と https://example.org は別サイト
     - https://app1.user1.workers.dev と https://app2.user1.workers.dev は同一サイト
+      - 一つ左側のラベルが同じであるため
     - https://app.user1.workers.dev と https://app.user2.workers.dev は別サイト
       - 一つ左側のラベルが異なるため
 - CORSポリシーとは
