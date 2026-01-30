@@ -174,6 +174,8 @@ SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策�
       - クロスサイトリクエストでもクッキーを送信する
       - Noneを設定する場合 Secure 属性も設定する必要がある
 
+# 想定する状況
+
 想定する状況について、
 
 - 完全同一ドメイン
@@ -196,15 +198,15 @@ SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策�
 - 開発者は前提として 以下の設計を守るものとする
 - API のセッション管理は httponly クッキーを利用する
   - クッキーが存在していないとAPI呼び出しが行えないものとする
-  - 正規の用途では、fetch apiにおいて credentials: includeを設定した呼び出しを想定する
+  - fetch apiにおいて credentials: includeを設定した呼び出しを想定する
 - データを変更するAPI (副作用あり) と データを取得するAPI (副作用なし) で メソッドを分離する
   - API 設計の段階で考慮する
   - データを変更するAPI (副作用あり)
     - unsafe method を用いる
-      - POST, PUT, PATCH, DELETE など
+      - POST, PUT, PATCH, DELETE
   - データを取得するAPI (副作用なし)
     - safe method を用いる
-      - GET, HEAD, OPTIONS など
+      - GET, HEAD, OPTIONS, TRACE
 - クッキーのSameSite属性について
   - 完全同一ドメイン・サブドメインの場合
     - SameSite=Lax を設定する
