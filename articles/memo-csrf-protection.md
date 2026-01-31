@@ -1,13 +1,15 @@
 ---
-title: "SPA + API 環境におけるCSRF対策メモ"
+title: "SPA + API 構成における CSRF攻撃の防御機構はどう働くのか？"
 emoji: "📌"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: []
 published: false
 ---
 
-SPA + API 環境における CSRF・クロスサイト読み取り攻撃対策について、以下のメモを作成しています。
-ファクトチェックしてください。
+# はじめに
+
+皆さん、こんにちは。
+かろっく@calloc134 です。
 
 # 忙しい人向けの結論
 
@@ -246,6 +248,29 @@ hono を利用するベースで解説
   - Originヘッダ検証を怠った場合
   - つまりOriginヘッダ検証のない場合において、
   - CookieのSameSite属性や CORSポリシーによる CSRF攻撃の副次的防御の影響について考察することを目的とする
+- 余談: Sec-Fetch-Site ヘッダ検証について
+  - 最近のブラウザでは Sec-Fetch-Site ヘッダが送信される
+  - Origin ヘッダ検証の補助として Sec-Fetch-Site ヘッダ検証を利用することで
+  - より堅牢な CSRF防御を実現できる
+  - Sec-Fetch-Site ヘッダを検証するときは以下のような実装となる
+    - 1. もし Sec-Fetch-Siteヘッダが存在するのであれば
+      - a. 完全同一ドメインの場合
+        - Sec-Fetch-Site ヘッダの値が `same-origin` であれば許可
+        - Sec-Fetch-Site ヘッダの値が `same-site` または `cross-site` であれば CSRF攻撃の可能性が高いので拒否
+      - b. サブドメインの場合
+        - Sec-Fetch-Site ヘッダの値が `same-origin` であれば許可
+        - Sec-Fetch-Site ヘッダの値が `same-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
+        - Sec-Fetch-Site ヘッダの値が `cross-site` であればCSRF攻撃の可能性が高いので拒否
+      - c. 完全別ドメインの場合
+        - Sec-Fetch-Site ヘッダの値が `same-origin` であれば許可
+        - Sec-Fetch-Site ヘッダの値が `same-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
+        - Sec-Fetch-Site ヘッダの値が `cross-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
+    - 2. Sec-Fetch-Siteヘッダが存在しない場合
+      - 古いブラウザ等では送信されないことがあるためフォールバック処理が必要
+      - Originヘッダ検証にフォールバック
+  - Sec-Fetch-Site ヘッダ検証を行っていても、Origin ヘッダ検証との併用が前提となる
+    - Sec-Fetch-Site ヘッダはブラウザによって送信されない場合があるため
+    - また `same-site` や `cross-site` の場合は より厳密な検証が必要となるため
 
 # Origin ヘッダ検証を怠った場合の CSRF攻撃の成立可否
 
@@ -381,3 +406,36 @@ hono を利用するベースで解説
   - Originヘッダは、同一オリジン = 完全同一ドメインでGET, HEAD のみ付属しないという特徴がある
   - これは、完全同一ドメインかつsafe methodの場合 CSRF攻撃の危険性が極めて少なく、心配する必要がないと判断されるからである
   - したがって、同一オリジンかつsafe methodの場合には Originヘッダ検証を省略することができる
+
+# 結論
+
+- α: 攻撃者ページからの fetch apiを用いた unsafe methodによるCSRF攻撃
+  - Originヘッダ検証を怠った場合でも CSRF攻撃が成立しないことが多い
+- β: text/plain等の simple requestと認識されるコンテンツタイプを用いた POSTでJSONデータを無理やり送信させるタイプの CSRF攻撃
+  - Originヘッダ検証を怠った場合に CSRF攻撃が成立する可能性がある
+  - したがって 開発者は
+    - API の要件に不要な場合は
+    - simple requestと認識されるリクエストを APIで受け入れないようにすることが望ましい
+  - もしくは Hono の `hono/csrf` ミドルウェアを利用して simple request と認識されるリクエストに対して Originヘッダ検証を行うことが望ましい
+- γ: 攻撃者ページからのfetch apiを用いたsafe methodによるクロスサイト読み取り攻撃
+  - Originヘッダ検証を怠った場合でも クロスサイト読み取り攻撃が成立しないことが多い
+- 以上より、Originヘッダ検証を怠った場合においても
+  - 基本的には 適切な CORSポリシーを設定した際の 同一オリジンポリシー(SOP) によるCSRF耐性
+  - が働くことで、CSRF攻撃・クロスサイト読み取り攻撃を防御できる場合が多いことがわかる
+  - SameSite属性によるCSRF耐性も副次的に働く場合があるが、同一オリジンポリシーよりは防御効果が低い
+  - どちらの場合も、βの攻撃方法に対しては防御効果がない場合がある
+    - その部分のみ `hono/csrf` ミドルウェアで 狙い撃ちの防御を行うことが望ましい
+- 基本的には 最初に述べた通り
+  - `hono/cors` で正しく CORSポリシーを設定し
+  - クッキーの SameSite属性を適切に設定し
+  - データを変更するAPI (副作用あり) と データを取得するAPI (副作用なし) で メソッドを分離し
+  - 以上に気をつけて実装すれば CSRFは基本的に防御できる
+- 更に安全を期すのであれば
+  - `hono/csrf` ミドルウェアの代わりに
+    - すべてのリクエストに対して Originヘッダ検証を行う
+      - ただし 同一ドメイン = 同一オリジンかつ GET/HEAD の場合は Originヘッダが付属しないため 例外的に検証をスキップする
+    - コンテンツタイプを application/json のみ受け入れる
+  - といった対策を追加することが望ましい
+  - ただし この場合は独自実装になるため 注意が必要
+
+# おわりに
