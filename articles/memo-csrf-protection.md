@@ -242,8 +242,14 @@ hono を利用するベースで解説
 - CSRF攻撃の防御の一番根本的解決はOriginヘッダ検証
 - Originヘッダを検証していれば
   - 完全同一ドメイン・サブドメイン・完全別ドメイン のいずれの場合でも
-  - また unsafe method・safe method のいずれの場合でも
   - CSRF攻撃を防御できる
+  - なお、CSRF攻撃とは 主に unsafe method が前提となる攻撃なので
+  - 以後のヘッダ検証対策は unsafe method (POST, PUT, PATCH, DELETE) の場合を想定する
+  - 逆に safe method (GET, HEAD, OPTIONS, TRACE) の場合は これらの検証を省略しても問題ない
+- Origin ヘッダ検証の流れ
+  - Originヘッダの値が 予期されるオリジンと一致するかを確認
+    - 一致すれば許可
+    - 一致しなければ拒否
 - しかし今回は
   - Originヘッダ検証を怠った場合
   - つまりOriginヘッダ検証のない場合において、
@@ -251,20 +257,25 @@ hono を利用するベースで解説
 - 余談: Sec-Fetch-Site ヘッダ検証について
   - 最近のブラウザでは Sec-Fetch-Site ヘッダが送信される
   - Origin ヘッダ検証の補助として Sec-Fetch-Site ヘッダ検証を利用することで
-  - より堅牢な CSRF防御を実現できる
+  - Origin ヘッダ検証よりもパフォーマンスの良い CSRF防御を実現できる可能性がある
   - Sec-Fetch-Site ヘッダを検証するときは以下のような実装となる
     - 1. もし Sec-Fetch-Siteヘッダが存在するのであれば
+      - 前提: Sec-Fetch-Site ヘッダの値が `none` の場合は一括で拒否
+      - その場合 Sec-Fetch-Site ヘッダの値は以下の3種類となる
+        - `same-origin`
+        - `same-site`
+        - `cross-site`
       - a. 完全同一ドメインの場合
+        - 正規のリクエスト: `same-origin`
         - Sec-Fetch-Site ヘッダの値が `same-origin` であれば許可
         - Sec-Fetch-Site ヘッダの値が `same-site` または `cross-site` であれば CSRF攻撃の可能性が高いので拒否
       - b. サブドメインの場合
-        - Sec-Fetch-Site ヘッダの値が `same-origin` であれば許可
-        - Sec-Fetch-Site ヘッダの値が `same-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
+        - 正規のリクエスト: `same-site`
+        - Sec-Fetch-Site ヘッダの値が `same-origin` または `same-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
         - Sec-Fetch-Site ヘッダの値が `cross-site` であればCSRF攻撃の可能性が高いので拒否
       - c. 完全別ドメインの場合
-        - Sec-Fetch-Site ヘッダの値が `same-origin` であれば許可
-        - Sec-Fetch-Site ヘッダの値が `same-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
-        - Sec-Fetch-Site ヘッダの値が `cross-site` であれば より厳密な検証が必要なので Originヘッダ検証に移行
+        - 正規のリクエスト: `cross-site`
+        - Sec-Fetch-Site ヘッダ検証は基本的に効力がないため すべての場合で Originヘッダ検証に移行
     - 2. Sec-Fetch-Siteヘッダが存在しない場合
       - 古いブラウザ等では送信されないことがあるためフォールバック処理が必要
       - Originヘッダ検証にフォールバック
