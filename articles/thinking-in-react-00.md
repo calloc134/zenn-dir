@@ -249,3 +249,5 @@ Reconciliation とは UI のみに存在する単語ではなく、
 次回は、React 特有の思想である**純粋関数性**について解説していきます。
 React がなぜ関数コンポーネントを推奨し、なぜ純粋性を重視するのか、
 深掘りしていきましょう。
+
+次回: https://zenn.dev/calloc134/articles/thinking-in-react-01

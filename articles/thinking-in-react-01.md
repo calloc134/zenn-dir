@@ -395,3 +395,5 @@ React は、関数コンポーネントが純粋関数性を持つことを強�
 
 次回は、React が提供する副作用の記述手段である **useEffect** について解説していきます。
 React の思想に沿った形で副作用を記述する方法を学んでいきましょう。
+
+次回: https://zenn.dev/calloc134/articles/thinking-in-react-02
