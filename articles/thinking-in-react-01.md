@@ -11,6 +11,8 @@ published: false
 こんにちは。かろっく@calloc134 です。
 
 前回は、宣言的 UI と UI フレームワークの基本的な考え方について解説しました。
+前回: https://zenn.dev/calloc134/articles/thinking-in-react-00
+
 今回からは、いよいよ React 特有の思想について深掘りしていきます。
 
 React の設計思想の中核にあるのは**純粋関数性**です。
