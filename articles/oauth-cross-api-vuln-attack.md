@@ -598,7 +598,7 @@ OAuth において Public Client の利用は
 一般的にセキュリティリスクが高いとされています。
 
 詳細は以下の記事が参考になります。
-https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/15-client-types
+https://zenn.dev/calloc134/books/sikkari-oauth-oidc/viewer/16-client-types
 
 以上の理由です。
 フロントエンドを Public Client として動作させ
