@@ -1,9 +1,9 @@
 ---
 title: "一人暮らしこそOpenWrtをやれ！ (v6プラス理論編)"
-emoji: "💬"
+emoji: "🏠"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["network", "openwrt", "ipv6", "フレッツ光", "ipoe"]
-published: false
+published: true
 ---
 
 # はじめに
