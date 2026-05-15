@@ -192,13 +192,17 @@ sequenceDiagram
 RSA 公開鍵は文字通り「公開」情報です。
 攻撃者が必要なものはその公開鍵だけで、特別な権限や知識は不要です。
 
-なお、Honoの今回の脆弱性は「JWT ヘッダの `alg` を信用してしまう」という問題こそありませんでしたが、
-似たような問題が原因で `HS256` へのフォールバックが起こってしまう実装になっていました。
-詳細は後述します。
+なお、Hono の今回の脆弱性は 2 種類あります。
+JWT ミドルウェア側では `alg` 未指定時に `HS256` へフォールバックしてしまう問題、
+JWK ミドルウェア側では JWK に `alg` がない場合に JWT ヘッダの `alg` を使ってしまう問題でした。
+どちらも、結果として検証アルゴリズムが利用者の意図から外れる点が問題でした。
 
 ## JWK の構造と `alg` フィールド
 
-JWK (JSON Web Key) は公開鍵を JSON で表現するための仕様 (RFC 7517) です。
+次に、JWK とその `alg` フィールドの意味について解説します。
+
+JWK (JSON Web Key) は、公開鍵をJSON形式で表現するための仕様(RFC 7517)です。
+JWK は次のような構造を持ちます。
 
 ```json
 {
@@ -221,11 +225,16 @@ JWK (JSON Web Key) は公開鍵を JSON で表現するための仕様 (RFC 7517
 | `kid` | 任意 | 鍵の識別子 |
 | `alg` | 任意 | 使用アルゴリズム |
 
-ここで重要なのが、**`alg` フィールドが任意 (OPTIONAL) である**ことです。RFC 7517 には次のように記されています。
+ここで重要なのが、**`alg` フィールドが任意 (OPTIONAL) である**ことです。
+
+RFC 7517 には次のように記されています。
 
 > Use of this member is OPTIONAL.
 
-実際、Auth0 や Microsoft Entra ID などの JWKS エンドポイントでも、`alg` が含まれないキーが存在します。「JWK に `alg` がなければ JWT ヘッダの `alg` を使う」という実装は、攻撃者に検証アルゴリズムを選ばせる隙を生みます。
+実際のところ、Auth0 や Microsoft Entra ID などの JWKS エンドポイントを見ると、
+`alg` が含まれないキーが存在します。
+
+「JWK に `alg` がなければ JWT ヘッダの `alg` を使う」という実装は、攻撃者に検証アルゴリズムを選ばせる隙を生みます。
 
 ## `kty` フィールドによるアルゴリズム推測
 
@@ -262,7 +271,10 @@ JWK の `use` フィールドは鍵の利用目的 (`sig` or `enc`) を示しま
 
 対処療法的であり、ケースの網羅が困難な面もありますが、ライブラリ利用者の変更を最小限にできます。
 
-Hono の今回の修正では、**① ホワイトリスト方式を主軸**に、② の要素も加える形を採用しています。
+Hono の今回の修正では、**① ホワイトリスト方式を主軸**にしています。
+加えて、JWT ヘッダの `alg` とライブラリ利用者が指定した `alg`、
+または JWK 側に存在する `alg` の不一致を拒否することで、
+アルゴリズムの食い違いを早い段階で検出する形にしています。
 
 ## 他のフレームワーク・ライブラリの対応
 
@@ -365,7 +377,7 @@ CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N
 - **UI:N** — 被害者の操作が不要
 - **I:H** — 完全性への影響が大きい (認可バイパス)
 
-攻撃に必要なものは、公開されている JWKS エンドポイントの URL と RSA 公開鍵のバイト列だけです。特別なツールも複雑な手順も不要で、ネットワーク越しに完全な認証バイパスが成立します。
+攻撃に必要なものは、公開されている JWKS エンドポイントの URL や RSA 公開鍵のバイト列です。特別な権限を必要とせず、設定によってはネットワーク越しに認証・認可バイパスが成立し得ます。
 
 **影響を受けるアプリケーションの条件**
 
@@ -406,7 +418,7 @@ export const verify = async (
     : algOrOptions
 
   if (!alg) {
-    throw new Error('JWT verification requires "alg" to be specified')
+    throw new JwtAlgorithmRequired()
   }
   // ...
 }
@@ -422,10 +434,7 @@ export const jwt = (options: {
   // ...
 }): MiddlewareHandler => {
   if (!options.alg) {
-    throw new Error(
-      'JWT auth middleware requires options for "alg". ' +
-      'Please specify the algorithm explicitly to prevent algorithm confusion attacks.'
-    )
+    throw new Error('JWT auth middleware requires options for "alg"')
   }
   // ...
 }
@@ -443,107 +452,136 @@ app.use('/api/*', jwt({ secret: 'my-secret', alg: 'HS256' }))
 
 ## JWK ミドルウェアの修正内容
 
-JWK 側の修正はより多層的です。
+JWK 側の修正は、JWT 側よりも対象が少し広くなります。
+最終的に Hono 本体へ入った実装では、主に次の 5 点を行っています。
+
+1. JWK ミドルウェアの `alg` オプションを必須にする
+2. `verifyWithJwks()` の `allowedAlgorithms` を必須にする
+3. `allowedAlgorithms` には非対称鍵アルゴリズムだけを指定できる型にする
+4. JWK/JWKS 検証では HS256/HS384/HS512 を拒否する
+5. JWK の `alg` が存在する場合、JWT ヘッダの `alg` と一致しなければ拒否する
 
 ### アルゴリズム分類の型定義
 
-まず、対称鍵と非対称鍵を分類する定数が追加されました。
+まず、対称鍵アルゴリズムと非対称鍵アルゴリズムを型として分けました。
 
 ```typescript
 // src/utils/jwt/jwa.ts に追加
-export const SymmetricAlgorithms = new Set<SignatureAlgorithm>(['HS256', 'HS384', 'HS512'])
+export type SymmetricAlgorithm = 'HS256' | 'HS384' | 'HS512'
 
-export const AsymmetricAlgorithms = new Set<SignatureAlgorithm>([
-  'RS256', 'RS384', 'RS512',
-  'PS256', 'PS384', 'PS512',
-  'ES256', 'ES384', 'ES512',
-  'EdDSA',
-])
-
-// kty とアルゴリズムの対応マップ
-export const KtyToAlgorithms: Record<string, Set<SignatureAlgorithm>> = {
-  RSA: new Set(['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512']),
-  EC: new Set(['ES256', 'ES384', 'ES512']),
-  OKP: new Set(['EdDSA']),
-}
+export type AsymmetricAlgorithm =
+  | 'RS256'
+  | 'RS384'
+  | 'RS512'
+  | 'PS256'
+  | 'PS384'
+  | 'PS512'
+  | 'ES256'
+  | 'ES384'
+  | 'ES512'
+  | 'EdDSA'
 ```
+
+これにより、`verifyWithJwks()` の `allowedAlgorithms` や JWK ミドルウェアの `alg` には、
+`HS256` のような対称鍵アルゴリズムを TypeScript 上でも指定しづらくなりました。
 
 ### 検証フローの改善
 
-`verifyWithJwks` の検証フローは次のように整理されました。
+`verifyWithJwks()` では、`allowedAlgorithms` が必須になりました。
 
 ```typescript
-// 修正後のフロー (概要)
-const allowedAlgs = options.allowedAlgorithms
-  ? new Set(options.allowedAlgorithms)
-  : AsymmetricAlgorithms  // デフォルトは非対称鍵のみ
+export const verifyWithJwks = async (
+  token: string,
+  options: {
+    keys?: HonoJsonWebKey[]
+    jwks_uri?: string
+    verification?: VerifyOptions
+    allowedAlgorithms: readonly AsymmetricAlgorithm[]
+  },
+  init?: RequestInit
+): Promise<JWTPayload> => {
+  // ...
+}
+```
 
-// 1. ホワイトリストチェック
-if (!allowedAlgs.has(header.alg)) {
-  throw new JwtAlgorithmNotAllowed(header.alg, Array.from(allowedAlgs))
+検証フローは、おおむね次の順序です。
+
+```typescript
+// 1. JWT ヘッダを読む
+const header = decodeHeader(token)
+
+// 2. kid が存在することを確認する
+if (!header.kid) {
+  throw new JwtHeaderRequiresKid(header)
 }
 
-// 2. 対称鍵アルゴリズムを拒否
-if (SymmetricAlgorithms.has(header.alg)) {
+// 3. HS256/HS384/HS512 を拒否する
+if (symmetricAlgorithms.includes(header.alg as SymmetricAlgorithm)) {
   throw new JwtSymmetricAlgorithmNotAllowed(header.alg)
 }
 
-// 3. kid で JWK を検索 (既存処理)
-
-// 4. JWK の use / key_ops / alg フィールドを検証
-validateJwkForVerification(matchingKey, header.alg)
-
-// 5. 検証実行 (header.alg を使用、フォールバックなし)
-return await verify(token, matchingKey, { alg: header.alg, ...verifyOpts })
-```
-
-### `validateJwkForVerification` による多層チェック
-
-```typescript
-function validateJwkForVerification(jwk: HonoJsonWebKey, headerAlg: SignatureAlgorithm): void {
-  // use フィールドが "sig" 以外なら拒否
-  if (jwk.use !== undefined && jwk.use !== 'sig') {
-    throw new JwtKeyUsageInvalid(...)
-  }
-
-  // key_ops フィールドが "verify" を含まなければ拒否
-  if (jwk.key_ops !== undefined && !jwk.key_ops.includes('verify')) {
-    throw new JwtKeyUsageInvalid(...)
-  }
-
-  // JWK の alg が JWT ヘッダの alg と不一致なら拒否
-  if (jwk.alg !== undefined) {
-    if (jwk.alg !== headerAlg) {
-      throw new JwtAlgorithmMismatch(jwk.alg, headerAlg)
-    }
-  } else {
-    // alg がない場合は kty で互換性を確認
-    if (jwk.kty !== undefined) {
-      const compatibleAlgs = KtyToAlgorithms[jwk.kty]
-      if (compatibleAlgs && !compatibleAlgs.has(headerAlg)) {
-        throw new JwtKtyAlgorithmMismatch(jwk.kty, headerAlg)
-      }
-    }
-  }
+// 4. 許可された非対称鍵アルゴリズムか確認する
+if (!options.allowedAlgorithms.includes(header.alg as AsymmetricAlgorithm)) {
+  throw new JwtAlgorithmNotAllowed(header.alg, options.allowedAlgorithms)
 }
+
+// 5. kid で JWK を探す
+const matchingKey = verifyKeys.find((key) => key.kid === header.kid)
+
+// 6. JWK に alg があるなら、JWT ヘッダの alg と一致するか確認する
+if (matchingKey.alg && matchingKey.alg !== header.alg) {
+  throw new JwtAlgorithmMismatch(matchingKey.alg, header.alg)
+}
+
+// 7. 検証は header.alg で実行する
+return await verify(token, matchingKey, {
+  alg: header.alg,
+  ...verifyOpts,
+})
 ```
 
-JWK の `alg` フィールドがない場合でも、`kty` から互換アルゴリズムの集合を取得し、JWT ヘッダの `alg` がそのファミリーに属するかを確認しています。鍵のアルゴリズムを確定はできないが、少なくともファミリーの整合性は担保するという考え方です。
+修正前は `matchingKey.alg || header.alg` という形で、
+JWK に `alg` がなければ JWT ヘッダの `alg` にフォールバックしていました。
+
+修正後は、まずアプリケーション側が明示した `allowedAlgorithms` に含まれるかを確認し、
+さらに HS 系アルゴリズムを JWK/JWKS 検証では拒否します。
+そのうえで、JWK に `alg` が存在する場合は JWT ヘッダの `alg` と一致することを確認します。
+
+ポイントは、**JWT ヘッダの `alg` をそのまま信用しているわけではなく、
+利用者が指定した allowlist と照合したうえで検証に使っている**ことです。
 
 ### ミドルウェアの変更
+
+JWK ミドルウェア側では、`alg` オプションが必須になりました。
 
 ```typescript
 // 修正前 (alg 未指定で動作)
 app.use('/auth/*', jwk({ jwks_uri: 'https://example.com/.well-known/jwks.json' }))
 
-// 修正後 (allowedAlgorithms で制御)
+// 修正後 (alg で許可アルゴリズムを明示)
 app.use('/auth/*', jwk({
   jwks_uri: 'https://example.com/.well-known/jwks.json',
-  allowedAlgorithms: ['RS256'],  // 明示的に指定
+  alg: ['RS256'],
 }))
 ```
 
-なお、`allowedAlgorithms` を省略した場合はデフォルトで `AsymmetricAlgorithms` (非対称鍵アルゴリズム全体) が適用されます。未指定でも対称鍵は拒否される設計になっています。
+内部では、この `alg` が `verifyWithJwks()` の `allowedAlgorithms` として渡されます。
+
+```typescript
+payload = await Jwt.verifyWithJwks(
+  token,
+  {
+    keys,
+    jwks_uri,
+    verification: verifyOpts,
+    allowedAlgorithms: options.alg,
+  },
+  init
+)
+```
+
+つまり、`jwk()` ミドルウェアを使う側は `alg: ['RS256']` のように指定し、
+`verifyWithJwks()` を直接使う側は `allowedAlgorithms: ['RS256']` のように指定する、という API になっています。
 
 # 自分で実装するときに気をつけるマインド
 
@@ -589,7 +627,7 @@ JWKS は公開鍵を配布する仕組みです。JWKS で対称鍵 (`kty: oct`)
 
 JWT の `alg` フィールドが外部から操作できるという構造的な問題は、実装者が意識的に対処しない限り容易にすり抜けてしまいます。Hono に限った話ではなく、`jsonwebtoken` や他のフレームワークでも過去に同種の問題が繰り返されてきた経緯があります。
 
-今回の修正後の Hono では、`alg` の明示が必須となり、JWK ミドルウェアでは対称鍵が拒否され、`kty` と `alg` の整合性チェックが加わりました。「動くけど安全ではない」コードを書けてしまう設計から、「安全でないと動かない」設計へのシフトです。
+今回の修正後の Hono では、`alg` の明示が必須となり、JWK ミドルウェアでは対称鍵が拒否され、許可アルゴリズムと JWK の `alg` 不一致が検出されるようになりました。「動くけど安全ではない」コードを書けてしまう設計から、「安全でないと動かない」設計へのシフトです。
 
 修正内容が何を防いでいるかを理解することが、次の問題を未然に防ぐことにつながります。
 
