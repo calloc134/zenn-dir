@@ -150,6 +150,8 @@ chunk は `then` を持つため、JavaScript からは thenable として扱わ
 
 危険なのは、それらの戻り値が後続の thenable assimilation に渡るように payload 全体を組み立てられる点である。
 
+ここでもうひとつ重要なのは、通常の outlined model 参照と raw chunk 参照は同じではない点である。通常の `"$<id>"` 参照で辿れるのは revive 後の値であり、chunk object そのものではない。これに対して `"$@<id>"` は chunk object そのものへ到達する。そのため、`Chunk.prototype.then` のような chunk 固有の性質を回収する足場としては `"$@"` が必要になる。
+
 ## 8. JavaScript の prototype chain
 
 JavaScript の object は、自分自身の property だけでなく、prototype chain 上の property も参照できる。
@@ -484,6 +486,57 @@ export function createResponse(
 
 file part が来る場合、React は `pendingFiles` と `queuedFields` によって field 解決順を調整する。これにより file の終了を待ってから field を解決する場合があるため、到着順を考えるうえでは `file` handler も重要になる。ただし、今回 chunk を実際に解決する主役は `field` handler の `resolveField(...)` である。
 
+`getRoot(response)` の実体である `getChunk(response, 0)` を追うと、root chunk `0` が最初に pending として作られ、後から field 到着で解決されることが見える。
+
+```js
+function getChunk(response, id) {
+  const chunks = response._chunks;
+  let chunk = chunks.get(id);
+  if (!chunk) {
+    const key = response._prefix + id;
+    const backingEntry = response._formData.get(key);
+    if (backingEntry != null) {
+      chunk = createResolvedModelChunk(response, backingEntry, id);
+    } else {
+      // 通常の multipart 経路ではまず pending chunk が作られる
+      // 実際の実装では closed 状態などの分岐もある
+    }
+    chunks.set(id, chunk);
+  }
+  return chunk;
+}
+```
+
+さらに、file と field の相互作用は次のようなコード断片で確認できる。
+
+```js
+busboyStream.on("file", (name, value, { encoding }) => {
+  if (encoding.toLowerCase() === "base64") {
+    throw new Error("base64 encoded file uploads are not accepted");
+  }
+  pendingFiles++;
+  value.on("end", () => {
+    pendingFiles--;
+    if (pendingFiles === 0) {
+      for (let i = 0; i < queuedFields.length; i += 2) {
+        resolveField(response, queuedFields[i], queuedFields[i + 1]);
+      }
+      queuedFields.length = 0;
+    }
+  });
+});
+
+busboyStream.on("field", (name, value) => {
+  if (pendingFiles > 0) {
+    queuedFields.push(name, value);
+  } else {
+    resolveField(response, name, value);
+  }
+});
+```
+
+このため、PoC の成立条件を追うときは `field` の値そのものだけでなく、`file` の有無によって `field` の解決時刻がどうずれるかも見ておく必要がある。
+
 第0段階の成果は次のとおりである。
 
 ```text
@@ -523,6 +576,8 @@ parseModelString / getOutlinedModel
 
 第1段階で利用されるのが `"$@0"` と outlined model path である。`"$@0"` は raw chunk `0` を返す参照 primitive であり、それ自体が `then` を呼ぶわけではない。重要なのは、raw chunk から `Chunk.prototype.then` を回収し、それを plain object の `then` として移植できる点である。
 
+なぜここで chunk 偽造が必要になるかを、攻撃者側の目的で言い換えるとこうなる。通常の prototype traversal だけでは「ある参照先から property を読む」ことしかできない。しかし chunk object らしく振る舞う plain object を作れると、React runtime 側に「これは chunk だ」と思わせて `initializeModelChunk` や `Chunk.prototype.then` のような chunk 専用の処理へ進ませられる。つまり、第1段階の目的は単なる property 読み出しではなく、plain object を chunk として扱わせるための橋を架けることにある。
+
 概念的には、次のような payload 断片で考えると分かりやすい。
 
 ```json
@@ -532,6 +587,21 @@ parseModelString / getOutlinedModel
 ```
 
 ここで `"$1"` 側は `"$@0"` で得た raw chunk を参照し、`__proto__:then` の path traversal で `Chunk.prototype.then` に到達する。これにより、root chunk の revive 結果である plain object に `then` が移植される。
+
+元の PoC を追ううえでは、「2個の field が相互参照する」という見方も役に立つ。ただし、ここでは悪用可能な完成形ではなく、役割だけを表す安全な骨格に留める。
+
+```text
+field 0:
+  forged plain object 本体
+  ├─ then: raw chunk 側から回収した then
+  ├─ status / value / reason
+  └─ _response: 二回目 revive 用の forged response
+
+field 1:
+  raw chunk 0 への参照
+```
+
+この骨格で重要なのは、field 1 が raw chunk 参照の足場になり、その参照結果を field 0 の revive 中に利用する、という依存関係である。
 
 第1段階で組み上がる forged object は、概念的には次のような形である。
 
@@ -547,6 +617,17 @@ parseModelString / getOutlinedModel
 ```
 
 ここで `reason` は、二回目の `initializeModelChunk` で `rootReference` を扱わせるための調整値である。既存の PoC では `-1` を与えることで `rootReference` を `undefined` 扱いに寄せていた。
+
+`rootReference` 周辺をもう少し素直に書くと、`initializeModelChunk` は `chunk.reason` を見て root reference を決める。PoC ではこの値も forged object 側で整えておく必要がある。
+
+```js
+function initializeModelChunk(chunk) {
+  const rootReference =
+    chunk.reason === -1 ? undefined : chunk.reason.toString(16);
+  const rawModel = JSON.parse(chunk.value);
+  // ...
+}
+```
 
 また、二回目の revive に必要な下準備の一部は、実はこの第1段階の中で既に終わっている。具体的には、`_response._formData.get = "$1:constructor:constructor"` のような二回目の prototype traversal は、第3段階の `"$B0"` 評価時ではなく、第1段階で `_response` を revive するときに解決される。
 
@@ -628,11 +709,37 @@ function initializeModelChunk(chunk) {
 
 ここで chunk の `value` には、二回目 revive 用の model、たとえば `{"then":"$B0"}` のような文字列が入っている。そして `"$B0"` は、`response._formData.get(response._prefix + id)` の戻り値を返す構文である。
 
+React の実装側では、この分岐はおおむね次のようになっている。
+
+```js
+case "B": {
+  const id = parseInt(value.slice(2), 16);
+  const blobKey = response._prefix + id;
+  const backingEntry = response._formData.get(blobKey);
+  return backingEntry;
+}
+```
+
 通常ならここで Blob のような backing entry が返る想定だが、この段階の response は forged response であり、`_formData.get` が callable な値に置き換えられている。そのため `"$B0"` の戻り値として generated function が得られる。
 
 重要なのは、`"$B0"` 自体が直ちに任意コード実行を起こすわけではない点である。この分岐がやっているのは `_formData.get(...)` の戻り値を返すことだけである。危険なのは、その戻り値を `Function` constructor に向けられるよう準備できてしまう点にある。
 
 このとき二回目の prototype traversal は、`_formData.get = "$1:constructor:constructor"` のような形で `Function` へ到達する。さらに `_prefix` は `response._prefix + id` の形で末尾に id が付くため、PoC では payload 側で末尾に無害な文を置いて trailing `0` を吸収するよう工夫していた。ここでは危険な文字列は省略するが、概念的には「`statement;0` のように末尾を無害化する」ための調整である。
+
+forged response 側の形は、危険な文字列を省くと概念的には次のようになる。
+
+```json
+{
+  "_response": {
+    "_prefix": "(省略: trace 用の harmless な本体)",
+    "_formData": {
+      "get": "(省略: Function へ到達する callable)"
+    }
+  }
+}
+```
+
+ここでのポイントは、`reviveModel` が本物の response ではなく forged `_response` を受け取るため、`"$B0"` の解釈結果も forged response に支配されることにある。
 
 第3段階の成果は次のとおりである。
 
