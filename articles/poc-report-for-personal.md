@@ -795,18 +795,70 @@ RCE の直接発火点は `"$B0"` ではない。また、`Function(...)` によ
 
 既存の安全側の動的解析で確認した内容を、新しい第0段階から第4段階のモデルに沿って整理し直す。
 
-前提として、動的解析では危険な OS コマンドは実行せず、trace 用の harmless payload に差し替えて検証した。本番環境への試行も行っていない。
+前提として、動的解析では危険な OS コマンドは実行せず、trace 用の harmless payload に差し替えて検証した。本番環境への試行も行っていない。また、比較用に通常の `encodeReply(...)` で生成した baseline payload も送り、workbench 自体が正常に動いていることを先に確認した。
+
+baseline では、Server Action `inspectGeneratedPayload(label, payload)` に対し、単に `baseline-label` と `baseline-payload` を渡す multipart fetch action を送った。ここでは HTTP `200` が返り、RSC 応答にも `baseline-label` / `baseline-payload` がそのまま含まれたため、以降の `trace-stage1` / `trace-stage2` 系 payload の観測結果を比較できる土台が取れた。
 
 確認できたことは次のとおりである。
 
 1. 第1段階では、root chunk の revive により plain object に `Chunk.prototype.then` が移植され、forged object が thenable として扱われること。
 2. 第2段階では、root chunk の解決値に対して thenable assimilation が走り、borrowed `Chunk.prototype.then` が呼ばれること。
-3. 第3段階では、forged object が chunk として再び `initializeModelChunk` に入り、`"$B0"` から generated function が得られること。
+3. 第3段階では、forged object が chunk として再び `initializeModelChunk` に入り、`"$B0"` が generated function を返すこと。
 4. 第4段階では、その generated function が `then(resolve, reject)` として呼ばれ、関数本体が Node.js 側で評価されること。
 
-第1段階については、`["trace-stage1", "from-forged-thenable"]` という harmless な配列が Server Action の引数に復元される payload を送ると、field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第一段階は成立した。これは、`"$@0"` が raw chunk 参照 primitive として働き、root chunk の revive 中に plain object へ `Chunk.prototype.then` を移植できることを裏づけている。
+## 第1段階の検証内容
 
-第4段階については、危険な RCE 文字列ではなく、生成された関数の本体に harmless な trace を埋め込んで確認した。使った本体は次のとおりである。
+第1段階では、「root chunk の revive 中に `Chunk.prototype.then` を plain object に移植し、その解決値が thenable として扱われるか」を確認した。ここでは危険な処理は使わず、最終的に harmless な配列 `["trace-stage1", "from-forged-thenable"]` が Server Action の引数に復元されれば成立と見なした。
+
+送った forged payload の要点は次のとおりである。
+
+- field `0` に、`then: '$1:__proto__:then'` を持つ plain object を入れる
+- 同じ object の `value` に、最終到達点として `["trace-stage1", "from-forged-thenable"]` を入れる
+- field `1` に `"$@0"` を入れ、chunk `0` そのものを raw chunk として参照させる
+
+ここで確認したかったのは、`"$@0"` 自体が何かを実行するかではない。`"$@0"` は raw chunk 参照の足場に過ぎず、その参照結果を使って `Chunk.prototype.then` が plain object 側へ移植され、その後の通常の JavaScript thenable assimilation で `then` が呼ばれるかどうかを見ている。
+
+この payload について、field 順序を 3 パターンで試した。
+
+- `0 -> 1`: helper chunk が後着でも成立するか
+- `1 -> 0`: helper chunk が先着でも成立するか
+- `0 -> file -> 1`: harmless な file part を挟み、`pendingFiles` / `queuedFields` の影響下でも成立するか
+
+成立判定は次の 3 点で行った。
+
+- HTTP 応答が `200` であること
+- RSC 応答に `label = "trace-stage1"` と `head = "from-forged-thenable"` が含まれること
+- サーバログに `[text-payload] {"label":"trace-stage1",...}` が出ること
+
+結果として 3 パターンすべてで第1段階は成立した。したがって、`"$@0"` は raw chunk 参照 primitive として働くが、それ自体が critical な `then` 呼び出しを起こすのではなく、root chunk の revive 中に plain object へ `Chunk.prototype.then` を移植するための足場として使われている、と整理するのが正確である。
+
+## 第2段階〜第4段階の検証内容
+
+第2段階以降では、「forged `_response` と `"$B0"` により generated function を返させ、その generated function が後段の thenable assimilation で `then(resolve, reject)` として呼ばれるか」を確認した。ここでも危険なコードは使わず、generated function の本体は harmless な `resolve(...)` と `console.log(...)` のみに限定した。
+
+送った forged payload の要点は次のとおりである。
+
+- field `0` に、第一段階と同様に `then: '$1:__proto__:then'` を持つ plain object を入れる
+- その `value` は `{"then":"$B0"}` とし、二回目の revive で `then` に generated function を入れさせる
+- forged `_response._formData.get` には `'$1:constructor:constructor'` を入れ、`Function` へ到達させる
+- forged `_response._prefix` には harmless な `arguments[0](["trace-stage2","from-generated-then"])//` などを入れ、generated function が実行されたときに安全な配列へ resolve するようにする
+
+ここでも重要なのは、`"$B0"` が単体で即実行 primitive ではないことである。`"$B0"` は forged `response._formData.get(response._prefix + id)` の戻り値、つまりここでは generated function を返す足場に過ぎない。実際に本体が動くのは、その generated function が次段の thenable assimilation により `then(resolve, reject)` として呼ばれた瞬間である。
+
+この payload についても、field 順序を 3 パターンで試した。
+
+- `0 -> 1`: helper chunk が後着でも第二段階の generated function まで到達するか
+- `1 -> 0`: helper chunk が先着でも同じく generated function まで到達するか
+- `0 -> file -> 1`: file part が間に挟まっても第二段階が壊れないか
+
+この 3 パターンでは、危険な RCE 文字列は使わず、`["trace-stage2", "from-generated-then"]` を resolve する safe payload を送った。成立判定は次の 2 点で行った。
+
+- HTTP 応答が `200` であること
+- RSC 応答に `label = "trace-stage2"` と `head = "from-generated-then"` が含まれること
+
+その結果、field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第4段階まで成立した。これは、`"$B0"` が generated function を返し、その戻り値が後続の thenable assimilation に渡る構成が、安全側 payload でも実際に通ることを示している。
+
+さらに第4段階の直接確認として、危険な RCE 文字列ではなく、生成された関数の本体に harmless な trace を埋め込んだ payload も送った。使った本体は次のとおりである。
 
 ```js
 console.log("[stage2-generated-then]", JSON.stringify({
@@ -817,15 +869,19 @@ console.log("[stage2-generated-then]", JSON.stringify({
 arguments[0](["trace-stage2-log", "from-generated-then-log"]);
 ```
 
+この trace payload の成立判定は次の 3 点で行った。
+
+- HTTP 応答が `200` であること
+- RSC 応答に `label = "trace-stage2-log"` と `head = "from-generated-then-log"` が含まれること
+- generated function 本体由来のサーバログが出ること
+
 この payload ではサーバログに次が出力された。
 
 ```text
 [stage2-generated-then] {"arg0Type":"function","arg1Type":"function","processType":"object"}
 ```
 
-これは、generated function の本体が実際に `then(resolve, reject)` として呼ばれ、しかも Node サーバの `process` を見られる文脈で実行されていることを意味する。
-
-さらに、危険な RCE 文字列は使わず、`["trace-stage2", "from-generated-then"]` を resolve する safe payload でも動的解析を行った。その結果、field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第4段階まで成立した。
+これは、generated function の本体が実際に `then(resolve, reject)` として呼ばれ、しかも Node サーバの `process` を見られる文脈で実行されていることを意味する。特に `arg0Type: "function"` と `arg1Type: "function"` は generated function が `then(resolve, reject)` として呼ばれたことを示し、`processType: "object"` はその本体が Node サーバ文脈で評価されたことを示している。
 
 要するに、安全側の動的解析で裏が取れたのは次の一点である。第1段階で plain object が thenable 化され、第2段階で borrowed `then` が動き、第3段階で generated function が作られ、第4段階でその generated function が本当に `then(resolve, reject)` として呼ばれる。
 
