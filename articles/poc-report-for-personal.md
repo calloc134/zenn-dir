@@ -10,17 +10,27 @@ published: false
 
 当記事は、[react2shell](https://react2shell.com/) の PoC 攻撃手法について、脆弱な React / Next.js の組み合わせをローカルに構築し、コードリーディングと安全側の動的解析を組み合わせて追い直した記録である。
 
-初稿ではコードリーディング中心だったため、「たぶんこう動いているだろう」という仮説が多かった。その後、第一段階と第二段階の主要経路については脆弱版環境で裏が取れたので、この記事では前提知識を先に揃えたうえで、「結局どこで `then` が呼ばれ、なぜ RCE まで繋がるのか」をトップダウンに説明し直す。
+初稿ではコードリーディング中心だったため、「たぶんこう動いているだろう」という仮説が多かった。その後、主要経路については脆弱版環境で裏が取れたので、この記事では前提知識を先に揃えたうえで、「結局どこで `then` が呼ばれ、なぜ RCE まで繋がるのか」をトップダウンに説明し直す。
+
+従来の「二回のデシリアライズと二回のプロトタイプトラバーサル」という整理は、データ処理の観点では今でも有効である。ただし、読者が混乱しやすいのは、その間に JavaScript の thenable assimilation が二回挟まる点である。そこで本稿では、呼び出しネストが追いやすいように、第0段階から第4段階までのモデルに組み替えて説明する。
 
 # 最初に結論
 
-react2shell PoC を理解するうえで、一番重要なのは次の三点である。
+react2shell PoC を理解するうえで重要なのは、`$@0` や `$B0` が単体で RCE を発火させるわけではない、という点である。
 
-1. Next.js が `await` しているのは攻撃者が与えた plain object そのものではなく、`decodeReplyFromBusboy(...)` が返す root chunk、つまり chunk `0` である。
-2. 第一段階で危険なのは `"$@0"` 自体ではない。`"$1:__proto__:then"` によって raw chunk から `Chunk.prototype.then` を回収し、それを plain object に移植した結果、通常の JavaScript の thenable assimilation が走って第二段階へ進める点が本質である。
-3. 第二段階で危険なのも `"$B0"` 自体ではない。第一段階の revive 中に `_response._formData.get` が `Function` へ置き換わり、`"$B0"` は生成された関数を返すだけである。本当にコードが動くのは、その生成された関数が次の `then(resolve, reject)` として呼ばれる瞬間である。
+PoC の本質は、React Flight の revive と JavaScript の thenable assimilation が交互に噛み合うことで、攻撃者入力から作られた値が最終的に `then(resolve, reject)` として呼ばれる点にある。
 
-この三点は、脆弱版環境に対する安全側の動的解析でも確認できた。危険な OS コマンドは実行していないが、第一段階では `["trace-stage1", "from-forged-thenable"]`、第二段階では `["trace-stage2", "from-generated-then"]` が実際に Server Action へ渡り、さらに trace 用 payload では生成された関数の本体から Node 側 `process` が見えていることも確認できた。
+呼び出しネストとしては、次の第0段階から第4段階で見ると分かりやすい。
+
+1. 第0段階: `decodeReplyFromBusboy` が Busboy stream を React Flight の内部 Response に接続し、root chunk `0` を返す。
+2. 第1段階: root chunk `0` の revive 中に、plain object に `Chunk.prototype.then` が移植される。
+3. 第2段階: root chunk の解決値が thenable と判断され、borrowed `Chunk.prototype.then` が呼ばれる。
+4. 第3段階: borrowed `then` によって forged object が chunk として再び revive され、`$B0` が generated function を返す。
+5. 第4段階: generated function がさらに `then(resolve, reject)` として呼ばれ、この時点で初めて関数本体が実行される。
+
+したがって、`$@0` は raw chunk 参照の足場であり、`$B0` は generated function を返す足場である。本当の発火点は、generated function が JavaScript の thenable assimilation によって呼ばれる瞬間である。
+
+この点は、脆弱版環境に対する安全側の動的解析でも確認できた。危険な OS コマンドは実行していないが、第一段階では `["trace-stage1", "from-forged-thenable"]`、第4段階では `["trace-stage2", "from-generated-then"]` が実際に Server Action へ渡り、さらに trace 用 payload では生成された関数の本体から Node 側 `process` が見えていることも確認できた。
 
 # 検証対象と注意事項
 
@@ -37,79 +47,132 @@ Next.js が実行時に解決していた `react-server-dom-webpack` は `19.2.0
 
 # 事前知識
 
-## RSC と Flight プロトコル
+## 1. React Server Components / Server Functions / Server Actions
 
-React Server Components (RSC) は、コンポーネントの一部をサーバ側で実行し、その結果だけを Flight という独自フォーマットでやり取りする仕組みである。Flight は JSON に似ているが、単なる JSON ではなく、チャンク ID や特殊な文字列構文を通して「他の値への参照」や「まだ未解決の thenable」を表現できる。
+React Server Components は、コンポーネントの一部をサーバ側で実行し、その結果をクライアント側へ送る仕組みである。React 公式ドキュメントでも、Server Components はクライアントバンドルとは別のサーバ環境で先に実行されるコンポーネントとして説明されている。
 
-react2shell の PoC は、この Flight の「特殊文字列を revive しながらオブジェクトを組み立てる」という性質を悪用する。要は、文字列から plain object を復元するだけでなく、その復元途中で別チャンクや prototype chain を参照できてしまう点が重要になる。
+一方、`"use server"` が付いた関数は React 公式の用語では Server Functions であり、フォームの `action` として使われる文脈では Server Actions とも呼ばれる。Next.js 側でも、サーバ上で動く async 関数をクライアントからネットワークリクエスト越しに呼ぶ仕組みとして説明されている。
 
-## Server Actions と `decodeReplyFromBusboy`
+react2shell では、この「Server Action の引数を HTTP request から復元する処理」が入口になる。
 
-React / Next.js の Server Actions では、クライアントからサーバへ `multipart/form-data` を送り、その中に Flight 形式の引数を埋めて渡す。Next.js 側の multipart fetch action 分岐では、最終的に次のようなコードで引数が復元される。
+## 2. Server Actions と multipart/form-data
 
-```js
-boundActionArguments = await decodeReplyFromBusboy(busboy, serverModuleMap, {
-  temporaryReferences,
-});
+Server Action の呼び出しでは、引数や関連データが HTTP request body として送られる。React / Next.js のフォーム送信では `FormData` が使われるため、実際のリクエスト本体は `multipart/form-data` になる。
+
+`multipart/form-data` は、ひとつの body の中に複数の part を入れる形式である。part は通常の text field であることもあれば、file stream であることもある。react2shell の経路では、この multipart body の field に Flight payload が含まれる。
+
+ここで必要なのは RFC の細部ではなく、次の理解だけで十分である。
+
+- multipart/form-data は field / file part に分かれる
+- parser はそれをイベントとして通知する
+- React はそのイベントを Flight の chunk 管理へ接続する
+
+## 3. Busboy とは何か
+
+Busboy は、Node.js で incoming な HTML form data を stream として解析する parser である。README でも、`multipart/form-data` を含む form data をパースし、`file` event と `field` event を通知するストリーミング parser として説明されている。
+
+重要なのは、Busboy 自体は React Flight を理解しない点である。Busboy が理解するのは multipart の構造だけであり、通常 field が来れば `field` event、file part が来れば `file` event として通知する。
+
+```text
+HTTP request body
+  ↓
+Busboy
+  ├─ field event: name, value
+  ├─ file event: name, stream, metadata
+  ├─ finish / close event
+  └─ error event
 ```
 
-ここで重要なのは、`decodeReplyFromBusboy(...)` が返すのは「完成済みの引数配列」ではなく、React runtime が管理する root chunk だという点である。したがって、PoC を理解するには「Busboy が field を受けたあと、chunk `0` がどう初期化されるか」を追う必要がある。
+react2shell の脆弱性は Busboy 自体にあるわけではない。重要なのは、React の `decodeReplyFromBusboy` が Busboy の event を受け取り、それを React Flight の chunk 管理状態へ接続する点である。
 
-## チャンクとチャンクオブジェクト
+## 4. `decodeReplyFromBusboy` の責務
 
-Flight のデコードでは、各チャンクを内部の chunk object として保持する。これは Promise に似た thenable であり、まだ未初期化なら `PENDING`、文字列は受け取ったが revive 前なら `RESOLVED_MODEL`、復元完了後なら `INITIALIZED` といった状態を持つ。
+`decodeReplyFromBusboy` は、Server Action の multipart/form-data 入力を Busboy stream として受け取り、それを React Flight の内部 Response / chunk 管理状態へ接続する関数である。
 
-概念的には、次のような形で考えてよい。
+この関数は、まず React Flight 用の内部 Response object を作る。ここでいう Response は HTTP response ではなく、Flight reply の復元状態を保持する内部オブジェクトである。その後、Busboy に `field` / `file` / `finish` / `error` などの handler を登録し、最後に `getRoot(response)`、つまり root chunk `0` を返す。
 
-```js
+責務を箇条書きにすると次のとおりである。
+
+1. `createResponse(...)` で内部 Response を作る
+2. Busboy の `field` / `file` event handler を登録する
+3. field を `resolveField(...)` に流す
+4. file part と field part の順序を `pendingFiles` / `queuedFields` で管理する
+5. `getRoot(response)` で root chunk `0` を返す
+
+重要なのは、`decodeReplyFromBusboy(...)` が完成済みの Server Action 引数を即座に返すわけではない点である。返すのは root chunk `0` であり、これは thenable である。したがって、呼び出し側はこの root chunk を `await` / Promise 解決の対象として扱う。
+
+## 5. React Flight プロトコルとは何か
+
+Flight は、React Server Components / Server Functions の値をクライアントとサーバの間でやり取りするための内部シリアライズ形式である。見た目は JSON に近い部分もあるが、単なる JSON ではない。文字列中の特殊構文により、別 chunk への参照、未解決値、Blob 参照、outlined model 参照などを表現できる。
+
+要するに、Flight payload は「データ」ではあるが、単なる静的な JSON データではない。参照解決や遅延解決を含む、実行時オブジェクト復元のための表現である。
+
+## 6. Flight における chunk とは何か
+
+Flight のデコードでは、各値が chunk として管理される。chunk は ID を持ち、React の内部 Response object の `_chunks` map に保存される。
+
+chunk には状態があり、概念的には次のように遷移する。
+
+- `PENDING`: まだ値が届いていない
+- `RESOLVED_MODEL`: 文字列としての model は届いたが、まだ revive されていない
+- `INITIALIZED`: revive が完了し、実際の値になった
+- `ERRORED`: 復元中にエラーが発生した
+
+概念モデルは次のように考えれば十分である。
+
+```ts
 type Chunk<T> = {
-  status: Status,
-  value: any,
-  reason: any,
-  _response: Response,
-  then(resolve: (T) => void, reject?: (any) => void): void,
-}
+  status: Status;
+  value: any;
+  reason: any;
+  _response: Response;
+  then(resolve: (value: T) => void, reject?: (reason: any) => void): void;
+};
 ```
 
-今回とくに重要なのは、chunk が thenable なので `await` 可能であること、そして `decodeReplyFromBusboy` が返す root chunk は chunk `0` であることの二点である。
+chunk は `then` を持つため、JavaScript からは thenable として扱われる。そのため、`decodeReplyFromBusboy(...)` が root chunk `0` を返すと、呼び出し側の `await` / Promise 解決処理は `rootChunk0.then(...)` を呼ぶ。
 
-## 今回の PoC で使う Flight の文字列構文
+## 7. 今回関係する Flight 文字列構文
 
-今回の PoC に関係する構文だけを抜き出すと、次の三つで十分である。
+今回の PoC で重要なのは、次の三つである。
 
-| 文字列 | 意味 | PoC での役割 |
+| 構文 | 概念的な意味 | react2shell での役割 |
 | --- | --- | --- |
-| `"$@<hex>"` | raw chunk への参照 | chunk そのものを取り出す |
-| `"$B<hex>"` | `response._formData.get(prefix + id)` の参照 | 生成された関数を返させる足場 |
-| `"$<id>:path:to:prop"` | outlined model 参照 | prototype chain を辿る |
+| `"$@<id>"` | raw chunk 参照 | chunk object そのものへ到達する足場 |
+| `"$B<id>"` | backing FormData 参照 | forged `_formData.get` を経由して generated function を返す足場 |
+| `"$<id>:path"` | outlined model 参照 + property path | prototype traversal により `then` や `Function` へ到達する足場 |
 
-ここで先回りして強調しておくと、`$@` も `$B` も「それ単体で危険な処理を発火させる構文」ではない。`$@` は raw chunk を返すだけであり、`$B` も `response._formData.get(...)` の戻り値を返すだけである。危険になるのは、その戻り値が後段の thenable assimilation に渡されるよう細工できてしまうからである。
+ここで重要なのは、これらの構文が単体で RCE を起こすわけではない点である。
 
-## `initializeModelChunk` と `parseModelString`
+- `"$@0"` は raw chunk を返すだけである
+- `"$B0"` は `response._formData.get(...)` の戻り値を返すだけである
+- `"$<id>:path"` は property path を辿るだけである
 
-Flight のデシリアライズで中心になるのは `initializeModelChunk` である。`resolved_model` になった chunk は、ここで `JSON.parse` されたあと `reviveModel(...)` に渡され、最終的には `parseModelString(...)` が `"$@..."` や `"$B..."`、`"$1:..."` のような特殊構文を解釈する。
+危険なのは、それらの戻り値が後続の thenable assimilation に渡るように payload 全体を組み立てられる点である。
 
-```js
-function initializeModelChunk(chunk) {
-  const rawModel = JSON.parse(chunk.value);
-  const value = reviveModel(
-    chunk._response,
-    { "": rawModel },
-    "",
-    rawModel,
-    rootReference
-  );
-  // ...
-}
+## 8. JavaScript の prototype chain
+
+JavaScript の object は、自分自身の property だけでなく、prototype chain 上の property も参照できる。
+
+たとえば、ある object に `toString` が直接定義されていなくても、`Object.prototype.toString` が prototype chain 上に存在すれば、`obj.toString` として参照できる。
+
+```text
+obj
+  ↓ [[Prototype]]
+Object.prototype
+  ↓ [[Prototype]]
+null
 ```
 
-つまり、今回の PoC は「攻撃者が送った JSON 文字列が `initializeModelChunk` に入ったあと、どの構文がどの順番で revive されるか」を突いている。
+`__proto__` は object の内部 `[[Prototype]]` へアクセスする歴史的な accessor である。そのため、property path が `__proto__` を辿れる場合、own property だけでなく prototype object 側へ抜けられる。
 
-## プロトタイプチェーンと `constructor.constructor`
+## 9. prototype traversal とは何か
 
-`getOutlinedModel` の脆弱性は、ID 参照のあとに続く `:path:to:prop` を own-property 制約なしでそのまま辿れてしまう点にある。これにより `__proto__` や `constructor` を経由したプロトタイプトラバーサルが成立する。
+prototype traversal とは、`obj["a"]["b"]` のような property path 解決が own property に限定されず、prototype chain 上の property まで辿ってしまう問題である。
 
-たとえば JavaScript では、配列に対して次のような辿り方ができる。
+通常のデータ参照のつもりで path を解決していても、`__proto__` や `constructor` が path に含まれると、object の prototype や constructor function に到達できる場合がある。
+
+安全な最小例で書くと、次のようになる。
 
 ```js
 const arr = [];
@@ -117,37 +180,258 @@ arr.constructor === Array;
 arr.constructor.constructor === Function;
 ```
 
-exploit でも同じ考え方を使う。ただし対象は普通の配列ではなく raw chunk である。第一段階では `"$1:__proto__:then"` で `Chunk.prototype.then` を回収し、第二段階では `"$1:constructor:constructor"` で `Function` を回収する。どちらも「参照先 chunk の値や prototype chain を構文だけで辿れてしまう」ことが前提になっている。
+react2shell では、これと同じ発想が Flight の outlined model 参照と組み合わさり、通常の JSON-like な値から `Chunk.prototype.then` や `Function` へ到達する。
+
+後続の段階との対応は次のとおりである。
+
+```text
+第1段階:
+  prototype traversal で Chunk.prototype.then へ到達する
+
+第3段階:
+  prototype traversal で Function へ到達する
+```
+
+## 10. Function コンストラクタと動的関数生成
+
+JavaScript の `Function` コンストラクタは、文字列から新しい関数 object を作る。たとえば、概念的には `Function("return 1 + 1")` のように、文字列を関数本体としてコンパイルできる。
+
+```js
+const fn = Function("return 1 + 1");
+fn(); // 2
+```
+
+この仕組みは、信頼できる静的文字列に対して使うだけでも避けられがちであり、未信頼入力と組み合わさると重大なコード実行リスクになる。
+
+react2shell で重要なのは、`Function(...)` が呼ばれた瞬間に RCE が完了するわけではない点である。`Function(...)` は generated function を作る。本当に関数本体が実行されるのは、その generated function が後続の thenable assimilation により `then(resolve, reject)` として呼ばれる瞬間である。
+
+## 11. Promise / thenable / thenable assimilation
+
+thenable とは、Promise そのものではなくても `then` メソッドを持つ object のことである。
+
+JavaScript の Promise 解決処理は、値が thenable である場合、その `then` を `resolve` / `reject` callback とともに呼び出し、その結果を Promise の解決結果として取り込む。
+
+概念図で書くとこうなる。
+
+```text
+resolve(value)
+  ↓
+value has callable then?
+  ↓ yes
+value.then(resolveNext, rejectNext)
+```
+
+安全な例は次のとおりである。
+
+```js
+const thenable = {
+  then(resolve) {
+    resolve("ok");
+  },
+};
+
+await thenable; // "ok"
+```
+
+react2shell では、この thenable assimilation が二回悪用される。
+
+1. 1回目は、root chunk の復元値である forged object の `then` が呼ばれる場面である。この `then` の実体は `Chunk.prototype.then` であり、forged object を chunk として再初期化する。
+2. 2回目は、`"$B0"` が返した generated function が `then` として呼ばれる場面である。ここで generated function の本体が実行される。
+
+## 12. なぜこれらが組み合わさると危険なのか
+
+ここまでの知識をまとめると、react2shell の危険性は単一の機能にあるわけではない。
+
+- Server Action は HTTP request から引数を復元する
+- multipart/form-data は Busboy によって field / file に分解される
+- `decodeReplyFromBusboy` は field を Flight chunk 管理へ接続する
+- Flight は特殊文字列により参照や遅延値を表現できる
+- chunk は thenable である
+- prototype traversal により想定外の prototype property へ到達できる
+- `Function` constructor は文字列から関数を作れる
+- Promise は thenable を見つけると `then(resolve, reject)` を呼ぶ
+
+react2shell は、これらが連鎖した結果、データとして送られたはずの値が最終的に実行可能な `then` へ昇格する脆弱性である。
+
+対応表にすると、こう読める。
+
+| 事前知識 | 後で使う段階 | 役割 |
+| --- | --- | --- |
+| Server Actions / Server Functions | 第0段階 | なぜ HTTP request から関数引数を復元するのか |
+| multipart/form-data | 第0段階 | なぜ request body が field / file に分かれるのか |
+| Busboy | 第0段階 | なぜ `field` event / `file` event が出てくるのか |
+| `decodeReplyFromBusboy` | 第0段階 | root chunk `0` が返る理由 |
+| Flight protocol | 第1・第3段階 | なぜ文字列が特殊解釈されるのか |
+| chunk | 第0〜第3段階 | なぜ root chunk が thenable なのか |
+| `$@`, `$B`, `$<id>:path` | 第1・第3段階 | raw chunk 参照、FormData 参照、prototype traversal |
+| prototype chain | 第1・第3段階 | `__proto__` / `constructor` を辿れる理由 |
+| Function constructor | 第3・第4段階 | generated function が作られる理由 |
+| thenable assimilation | 第2・第4段階 | `then(resolve, reject)` が呼ばれる理由 |
 
 # 攻撃の全体像
 
-PoC 全体は、二回のデシリアライズと二回のプロトタイプトラバーサルから成る。段階ごとに見ると次のようになる。
+## 第0段階〜第4段階の概要
 
-| 段階 | 何をするか | 何が得られるか |
-| --- | --- | --- |
-| 第一段階 | `"$@0"` で raw chunk を参照し、`"$1:__proto__:then"` で `Chunk.prototype.then` を plain object に移植する | plain object を thenable として振る舞わせる |
-| 第二段階 | forged `_response` の中で `"_formData.get": "$1:constructor:constructor"` を `Function` にし、`"value": "{\"then\":\"$B0\"}"` を revive する | 生成された関数を次の `then` として呼ばせる |
+まず、段階ごとの役割を俯瞰する。
 
-もう少し因果関係を明確にすると、流れはこうである。
+| 段階 | 処理主体 | 主な関数・機構 | 起きること | RCE発火 |
+| --- | --- | --- | --- | --- |
+| 第0段階 | Next.js / React / Busboy | `decodeReplyFromBusboy`, `createResponse`, `getRoot` | multipart stream を React Flight の chunk 管理へ接続し、root chunk `0` を返す | しない |
+| 第1段階 | React Flight | `resolveField`, `resolveModelChunk`, `initializeModelChunk`, `reviveModel`, `parseModelString` | root chunk `0` を revive し、plain object に `Chunk.prototype.then` を移植する | しない |
+| 第2段階 | JS Promise | thenable assimilation | forged object の `then` が呼ばれ、`Chunk.prototype.then.call(forgedObject, ...)` になる | しない |
+| 第3段階 | React Flight | `Chunk.prototype.then`, `initializeModelChunk`, `reviveModel`, `parseModelString("$B0")` | forged chunk を revive し、generated function を `then` に持つ object を作る | まだしない |
+| 第4段階 | JS Promise | thenable assimilation | generated function が `then(resolve, reject)` として呼ばれる | ここで発火 |
 
-1. Next.js は `decodeReplyFromBusboy(...)` から返ってきた root chunk `0` を `await` する。
-2. chunk `0` の初期化中に、PoC が送り込んだ plain object に `Chunk.prototype.then` が移植される。
-3. root chunk の解決値が thenable 形状になるため、通常の JavaScript の thenable assimilation が走り、recovered `then` が呼ばれる。
-4. recovered `then` は forged plain object をもう一度 `initializeModelChunk` に通す。
-5. その二回目の revive で `"$B0"` が生成された関数を返し、その生成された関数が次の `then(resolve, reject)` として呼ばれる。
-6. この生成された関数の本体に何を埋め込めるかが、RCE の本質である。
+従来の「二回のデシリアライズと二回のプロトタイプトラバーサル」という整理は、この表では第1段階と第3段階の revive に対応する。違いは、その間に第2段階と第4段階として thenable assimilation を明示的に挟んでいる点である。
 
-ここまでが先に掴んでおくべき全体像である。以下では、この流れを実装レベルで順に追っていく。
+## then 呼び出しは合計3回
 
-# 詳細解析
+この経路では、`then` 呼び出しは合計3回発生する。
 
-## 第一段階: デシリアライズ一回目とチャンク偽造
+1回目は、`decodeReplyFromBusboy(...)` が返した root chunk `0` を待つ通常入口である。2回目は、root chunk の解決値である forged object の `then` が呼ばれる場面である。3回目は、generated function が `then` として呼ばれる場面であり、ここが発火点である。
 
-RSC サーバは、ユーザのデータを受け取り、デシリアライズ一回目を開始する。
+| 回数 | 呼ばれるもの | 位置づけ |
+| ---: | --- | --- |
+| 1回目 | `rootChunk0.then(resolve0, reject0)` | root chunk を待つ通常入口 |
+| 2回目 | `forgedObject.then(resolve1, reject1)` | 攻撃的 thenable assimilation 1回目。実体は `Chunk.prototype.then` |
+| 3回目 | `generatedFunction(resolve2, reject2)` | 攻撃的 thenable assimilation 2回目。ここが発火点 |
 
-Server Functions の受け取りは、Next.js 側コードで行われる。
+短く要約すると次のとおりである。
 
-https://github.com/vercel/next.js/blob/0e973f71f133f4a0b220bbf1e3f0ed8a7c75e00d/packages/next/src/server/app-render/action-handler.ts#L879C1-L883C16
+```text
+then 呼び出し総数:
+  3回
+
+攻撃上重要な thenable assimilation:
+  2回
+
+initializeModelChunk が走る回数:
+  2回
+
+RCE が発火する then 呼び出し:
+  3回目
+```
+
+## React revive と JS thenable assimilation が交互に現れる
+
+この PoC を読みやすくするコアは、次の交互構造で見ることである。
+
+```text
+第0段階: 入口準備
+
+第1段階: React Flight revive
+  ↓
+第2段階: JavaScript thenable assimilation
+  ↓
+第3段階: React Flight revive
+  ↓
+第4段階: JavaScript thenable assimilation
+```
+
+`"$@0"` と `"$B0"` のどちらも、この交互構造の途中にある足場であって、単独の終点ではない。
+
+## 関数呼び出しパスの全体図
+
+```text
+[第0段階: 入口準備]
+
+Next.js action handler
+└─ decodeReplyFromBusboy(busboy, serverModuleMap, options)
+   ├─ createResponse(...)
+   ├─ busboy.on("field", ...)
+   ├─ busboy.on("file", ...)
+   ├─ busboy.on("finish", ...)
+   ├─ busboy.on("error", ...)
+   └─ return getRoot(response)
+      └─ getChunk(response, 0)
+         └─ rootChunk0
+```
+
+```text
+[then 呼び出し 1回目: root chunk を待つ通常入口]
+
+await / Promise machinery
+└─ rootChunk0.then(resolve0, reject0)
+   └─ rootChunk0 が pending なら listener を登録
+```
+
+```text
+[第1段階: root chunk 0 の revive]
+
+Busboy field event
+└─ resolveField(response, "0", payload0)
+   └─ resolveModelChunk(rootChunk0, payload0, 0)
+      └─ initializeModelChunk(rootChunk0)
+         ├─ JSON.parse(rootChunk0.value)
+         └─ reviveModel(realResponse, ...)
+            └─ parseModelString / getOutlinedModel
+               ├─ raw chunk 参照
+               ├─ prototype traversal
+               └─ Chunk.prototype.then を取得
+
+結果:
+  rootChunk0.value = forgedObject
+```
+
+```text
+[第2段階: 1回目の攻撃的 thenable assimilation]
+
+Promise resolution
+└─ resolve0(forgedObject)
+   └─ forgedObject が then を持つ
+      └─ forgedObject.then(resolve1, reject1)
+         └─ Chunk.prototype.then.call(forgedObject, resolve1, reject1)
+```
+
+```text
+[第3段階: forged chunk の revive]
+
+Chunk.prototype.then.call(forgedObject, ...)
+└─ forgedObject.status === RESOLVED_MODEL
+   └─ initializeModelChunk(forgedObject)
+      ├─ JSON.parse(forgedObject.value)
+      └─ reviveModel(forgedObject._response, ...)
+         └─ parseModelString("$B0")
+            └─ forgedResponse._formData.get(forgedResponse._prefix + "0")
+               └─ generatedFunction を返す
+
+結果:
+  forgedObject.value = { then: generatedFunction }
+```
+
+```text
+[第4段階: 2回目の攻撃的 thenable assimilation]
+
+Chunk.prototype.then
+└─ resolve1(forgedObject.value)
+   └─ forgedObject.value が then を持つ
+      └─ generatedFunction(resolve2, reject2)
+         └─ generated function 本体が実行される
+```
+
+短縮図にするとこうなる。
+
+```text
+decodeReplyFromBusboy
+  ↓
+rootChunk0.then(...)                     // then 1回目
+  ↓
+initializeModelChunk(rootChunk0)         // revive 1回目
+  ↓
+forgedObject.then(...)                   // then 2回目
+  ↓
+initializeModelChunk(forgedObject)       // revive 2回目
+  ↓
+generatedFunction(...)                   // then 3回目、発火点
+```
+
+# 第0段階: `decodeReplyFromBusboy` による入口準備
+
+第0段階は、まだ攻撃的な revive が起きる前の通常処理である。Next.js の action handler は multipart request body を Busboy に流し、React 側の `decodeReplyFromBusboy` は Busboy stream を Flight reply の内部状態に接続する。
+
+Next.js 側の入口は、脆弱版コミットでは次の await である。
+
+https://github.com/vercel/next.js/blob/c09c5f9e278e46b0923c96ef5cf8a6bd9edbaf80/packages/next/src/server/app-render/action-handler.ts#L879-L883
 
 ```js
 boundActionArguments = await decodeReplyFromBusboy(busboy, serverModuleMap, {
@@ -155,112 +439,35 @@ boundActionArguments = await decodeReplyFromBusboy(busboy, serverModuleMap, {
 });
 ```
 
-このように、
-`decodeReplyFromBusboy`関数が await で呼び出される。
-この関数は、Node.js の Busboy モジュールを用いて、
-Server Functions (Actions)の引数等を Flight プロトコルで受け取り、デシリアライズを行う関数である。
+ここで await されているのは攻撃者が与えた plain object ではなく、`decodeReplyFromBusboy(...)` が返す root chunk `0` である。
 
-### 攻撃の理論: チャンク偽造による攻撃範囲の拡大
+React 側の `decodeReplyFromBusboy` は、まず `createResponse(...)` で内部 Response を作り、Busboy の `field` / `file` handler を登録し、最後に `getRoot(response)` を返す。
 
-攻撃者はまず最初に、Flight プロトコルのチャンクオブジェクトを偽造することを目指す。
-意図としては、ユーザが読み込める不正な値の影響範囲を広げるためである。
-単なるプロトタイプトラバーサルだけでは影響範囲が限定されるが、
-チャンクオブジェクトを偽造することで、可能な操作を大幅に増やすことが出来る。
-
-RSC の Flight プロトコルでは前述の通り、
-`$@` 構文を用いて Raw Chunk を読み込ませることが出来る機能が存在する。
-
-Raw Chunk 読み込みとは、他のチャンク (つまり、生のチャンク) を参照するものである。
-正規の用途では、専ら参照先のチャンクの完成まで読み込みを遅延するために活用する。
-主に Promise を Flight プロトコルでシリアライズしたとき等に利用される。
-
-Raw Chunk 読み込みでなく `$1` 構文を用いた場合、
-単なるプレーンオブジェクトが読み込まれ、
-チャンクそのものを取得することが出来ないことに注意する。
-しかし、Raw Chunk 読み込みを用いると、チャンクオブジェクトそのものを取得できる。
-
-そして、今回 Raw Chunk 読み込みを悪用する理由は、
-Chunk オブジェクトを取得し、そこから Chunk.prototype.then を取得し、
-それを埋め込んでチャンクオブジェクトになりすますためである。
-
-ユーザが渡した JSON データは、
-チャンクとしては扱えない、プレーンオブジェクトとしてデコードされる。
-しかし、ID を用いてプロトタイプトラバーサルを行い、チャンクオブジェクトそのものから
-Chunk.prototype.then を引っこ抜いて自分の JSON に埋め込むことができる。
-
-これにより、ユーザの JSON データをデシリアライズした段階で、
-プレーンオブジェクトでありながらチャンクらしく振る舞う特性を付与し、
-以後はチャンクとして振る舞わせることが出来る。
-
-実質的に、ユーザがチャンクを外部から偽造して挿入できることと等価である。
-
-では、具体的にどのようにチャンク偽造を行うか、次のセクションで説明する。
-
-### チャンク偽造の具体的なコード例
-
-では、具体的なコードを示しながら説明する。
-まず、Flight のデシリアライズ関数に到達するまでの流れを説明する。
-
-https://github.com/facebook/react/blob/dd048c3b2d8b5760dec718fb0926ca0b68660922/packages/react-server-dom-webpack/src/server/ReactFlightDOMServerNode.js#L548C1-L606C2
+https://github.com/facebook/react/blob/6de32a5a07958d7fc2f8d0785f5873d2da73b9fa/packages/react-server-dom-webpack/src/server/ReactFlightDOMServerNode.js#L548-L606
 
 ```js
-function decodeReplyFromBusboy<T>(
-  busboyStream: Busboy,
-  webpackMap: ServerManifest,
-  options?: { temporaryReferences?: TemporaryReferenceSet }
-): Thenable<T> {
+function decodeReplyFromBusboy(busboyStream, webpackMap, options) {
   const response = createResponse(
     webpackMap,
     "",
     options ? options.temporaryReferences : undefined
   );
-  // 省略
-  busboyStream.on("file", (name, value, { filename, encoding, mimeType }) => {
-    if (encoding.toLowerCase() === "base64") {
-      throw new Error(
-        "React doesn't accept base64 encoded file uploads because we don't expect " +
-          "form data passed from a browser to ever encode data that way. If that's " +
-          "the wrong assumption, we can easily fix it."
-      );
-    }
-    pendingFiles++;
-    const file = resolveFileInfo(response, name, filename, mimeType);
-    value.on("data", (chunk) => {
-      resolveFileChunk(response, file, chunk);
-    });
-    value.on("end", () => {
-      resolveFileComplete(response, name, file);
-      pendingFiles--;
-      if (pendingFiles === 0) {
-        // Release any queued fields
-        for (let i = 0; i < queuedFields.length; i += 2) {
-          resolveField(response, queuedFields[i], queuedFields[i + 1]);
-        }
-        queuedFields.length = 0;
-      }
-    });
-  });
-  // 省略
+  // ...
   return getRoot(response);
 }
 ```
 
-`decodeReplyFromBusboy(...)`関数はまず、
-`createResponse`関数で Response オブジェクトを生成する。
-
-ここの処理はあまり関係がなさそうだが、一応説明する。
-
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L1091C1-L1108C2
+`createResponse` が作るのは HTTP response ではなく、Flight の復元状態を持つ内部 object である。
 
 ```js
 export function createResponse(
-  bundlerConfig: ServerManifest,
-  formFieldPrefix: string,
-  temporaryReferences: void | TemporaryReferenceSet,
-  backingFormData?: FormData = new FormData()
-): Response {
-  const chunks: Map<number, SomeChunk<any>> = new Map();
-  const response: Response = {
+  bundlerConfig,
+  formFieldPrefix,
+  temporaryReferences,
+  backingFormData = new FormData()
+) {
+  const chunks = new Map();
+  const response = {
     _bundlerConfig: bundlerConfig,
     _prefix: formFieldPrefix,
     _formData: backingFormData,
@@ -273,333 +480,135 @@ export function createResponse(
 }
 ```
 
-Response と言っているが、レスポンスというより、これはただの内部状態を管理するオブジェクトである。
-そして`Response`は、内部に`_chunks` マップを保持している。
-これは、チャンク ID とチャンクオブジェクトの実体を保持する連想配列である。
+さらに `getRoot(response)` は実質的に `getChunk(response, 0)` であり、chunk `0` を取り出す。Busboy 経由の通常経路では、この時点では field `0` がまだ backing store に入っていないことが多いため、まず pending な root chunk `0` が作られ、後から `resolveField(...)` で `RESOLVED_MODEL` に進む。
 
-続いて、`busboyStream.on(...)` でイベントリスナーを登録する。
-イベントリスナーの処理は後ほど解説する。
+file part が来る場合、React は `pendingFiles` と `queuedFields` によって field 解決順を調整する。これにより file の終了を待ってから field を解決する場合があるため、到着順を考えるうえでは `file` handler も重要になる。ただし、今回 chunk を実際に解決する主役は `field` handler の `resolveField(...)` である。
 
-最後に`getRoot(response)`関数が呼ばれ、
-ルート、つまり ID が 0 の チャンクオブジェクトを取得する。
+第0段階の成果は次のとおりである。
 
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L177C1-L180C2
-
-実際には、`getRoot`関数はほぼラッパーであり、
-その内部の`getChunk(response, 0)`関数が実体である。
-
-`getChunk`関数は以下のように実装されている。
-
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L518C1-L540C2
-
-```js
-function getChunk(response: Response, id: number): SomeChunk<any> {
-  const chunks = response._chunks;
-  let chunk = chunks.get(id);
-  if (!chunk) {
-    const prefix = response._prefix;
-    const key = prefix + id;
-    // Check if we have this field in the backing store already.
-    const backingEntry = response._formData.get(key);
-    if (backingEntry != null) {
-      // We assume that this is a string entry for now.
-      chunk = createResolvedModelChunk(response, (backingEntry: any), id);
-    } else if (response._closed) {
-        // 省略
-    } else {
-        // 省略
-    }
-    chunks.set(id, chunk);
-  }
-  return chunk;
+```text
+第0段階の成果:
+  rootChunk0 が返る
+  rootChunk0 は thenable
 ```
 
-初回なので、チャンク ID 0 に対応するチャンクオブジェクトは存在しない。
-ただし、Busboy 経由で `getRoot(response)` が呼ばれる時点では、
-通常まだ backing FormData に field `0` が入っていない。
-そのため、この経路ではまず `createPendingChunk` で pending な chunk 0 が作られ、
-その後 field `0` が到着したときに `resolveModelChunk` で `resolved_model` に進む。
-`createResolvedModelChunk` になるのは、既に backing store に値が存在している場合である。
+ここでまだ起きていないことも明確にしておく。
 
-そして、生成されたチャンクオブジェクトを `response._chunks` マップに保存する。
-
-以上で、`getRoot`に関連する呼び出しは終了し、
-`decodeReplyFromBusboy`関数も return 文で終了する。
-この関数は チャンクオブジェクト、つまり thenable を返す。
-thenable なので、await 可能である。
-
-通信開始時の`decodeReplyFromBusboy`関数の呼び出しは、
-`return getRoot(response);`で終了するが、
-イベントリスナーに登録したコールバックの処理は、
-ストリーム処理に合わせて非同期に進行していく。
-今回の攻撃に直接関連してくるのは `field` である。
-一方、`file` ハンドラは `pendingFiles` と `queuedFields` によって field の解決順を遅らせるため、
-到着順を考える上で重要になる。
-
-```js
-busboyStream.on("file", (name, value, { filename, encoding, mimeType }) => {
-  if (encoding.toLowerCase() === "base64") {
-    // エラー処理
-  }
-  pendingFiles++;
-  const file = resolveFileInfo(response, name, filename, mimeType);
-  value.on("data", (chunk) => {
-    resolveFileChunk(response, file, chunk);
-  });
-  value.on("end", () => {
-    resolveFileComplete(response, name, file);
-    pendingFiles--;
-    if (pendingFiles === 0) {
-      // Release any queued fields
-      for (let i = 0; i < queuedFields.length; i += 2) {
-        resolveField(response, queuedFields[i], queuedFields[i + 1]);
-      }
-      queuedFields.length = 0;
-    }
-  });
-});
+```text
+第0段階で起きないこと:
+  - RCE は起きない
+  - forged chunk はまだできていない
+  - "$B0" もまだ評価されていない
 ```
 
-`value`に対してさらにイベントリスナーを登録している。
-ただし、実際に chunk を解決する主役は `field` ハンドラ側の `resolveField` 関数である。
+# 第1段階: root chunk 0 の revive と then 移植
 
-```js
-busboyStream.on("field", (name, value) => {
-  if (pendingFiles > 0) {
-    queuedFields.push(name, value);
-  } else {
-    resolveField(response, name, value);
-  }
-});
+第1段階では、field `0` の到着により root chunk `0` が `RESOLVED_MODEL` になり、`initializeModelChunk(rootChunk0)` が呼ばれる。
+
+実際の流れは次のとおりである。
+
+```text
+resolveField(response, "0", payload0)
+  ↓
+resolveModelChunk(rootChunk0, payload0, 0)
+  ↓
+initializeModelChunk(rootChunk0)
+  ↓
+JSON.parse(rootChunk0.value)
+  ↓
+reviveModel(...)
+  ↓
+parseModelString / getOutlinedModel
 ```
 
-この`resolveField` 関数内部で、何度か関数呼び出しを経由し、
-最終的に`initializeModelChunk` 関数が呼ばれる。
+第1段階で利用されるのが `"$@0"` と outlined model path である。`"$@0"` は raw chunk `0` を返す参照 primitive であり、それ自体が `then` を呼ぶわけではない。重要なのは、raw chunk から `Chunk.prototype.then` を回収し、それを plain object の `then` として移植できる点である。
 
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L1110C1-L1127C2
-
-```js
-export function resolveField(
-  response: Response,
-  key: string,
-  value: string
-): void {
-  // Add this field to the backing store.
-  response._formData.append(key, value);
-  const prefix = response._prefix;
-  if (key.startsWith(prefix)) {
-    const chunks = response._chunks;
-    const id = +key.slice(prefix.length);
-    const chunk = chunks.get(id);
-    if (chunk) {
-      // We were waiting on this key so now we can resolve it.
-      resolveModelChunk(chunk, value, id);
-    }
-  }
-}
-```
-
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L268C1-L299C2
-
-```js
-function resolveModelChunk<T>(
-  chunk: SomeChunk<T>,
-  value: string,
-  id: number
-): void {
-  if (chunk.status !== PENDING) {
-    // 省略
-    return;
-  }
-  const resolveListeners = chunk.value;
-  const rejectListeners = chunk.reason;
-  const resolvedChunk: ResolvedModelChunk<T> = (chunk: any);
-  resolvedChunk.status = RESOLVED_MODEL;
-  resolvedChunk.value = value;
-  resolvedChunk.reason = id;
-  if (resolveListeners !== null) {
-    // This is unfortunate that we're reading this eagerly if
-    // we already have listeners attached since they might no
-    // longer be rendered or might not be the highest pri.
-    initializeModelChunk(resolvedChunk);
-    // The status might have changed after initialization.
-    wakeChunkIfInitialized(chunk, resolveListeners, rejectListeners);
-  }
-}
-```
-
-前述のとおり、`initializeModelChunk`関数は、
-Flight プロトコルのデシリアライズを行う関数である。
-ここまで、デシリアライズを行う関数までの道のりを確認した。
-
-では、具体的なチャンク偽造の手順について解説する。
-
-:::message
-
-追記:
-
-この先の第一段階については、その後、脆弱版環境で安全側の動的解析を追加し、
-`$@0` が raw chunk 参照 primitive であること、
-そして field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第一段階が成立することを確認した。
-
-:::
-
-利用するのは、`$@`構文である。
-これは、Raw Chunk 参照を行うための構文である。
-
-具体的には、`"then": "$1:__proto__:then",`のように指定してやる。
-これにより、Chunk オブジェクトのプロトタイプから then プロパティを引っこ抜き、
-自身のオブジェクトの then プロパティに埋め込む。
-
-```json
-files = {
-    "0": (None, '{"then": "$1:__proto__:then"}'),
-    "1": (None, '"$@0"'),
-}
-```
-
-files で与えられるシリアライズされたチャンクについて、
-シリアライズチャンク 1 において 0 番目のチャンクを参照する。
-これにより、チャンク 0 の Raw Chunk を参照することができ、
-コード上で Chunk オブジェクトそのものを取得できる。
-
-そして、チャンク 0 の Chunk オブジェクトを参照しながら、
-チャンク 0 のデシリアライズを開始する。
-then プロパティをデシリアライズする際に、プロトタイプトラバーサルを行い、
-Chunk.prototype.then を取得し、プレーンオブジェクトの then プロパティに設定する。
-
-このようにして、チャンク 0 のデシリアライズ結果であるプレーンオブジェクトが、
-チャンクとして振る舞うようになる。
-
-以上の結果、
-ユーザの送信した JSON データをチャンクにみせかけ、
-チャンクの偽造という効果を達成できる。
-
-### チャンク偽造に必要なフィールドの設定
-
-なお、以後の処理で、
-チャンクとして振る舞うにあたり必要なフィールドを用意する必要がある。
-そのため、フィールドを設定している。
-
-これらのフィールドがあれば、サーバ側処理では型のチェックを行っていないため、
-十分にチャンクとして振る舞うことが出来る。
-
-これらのフィールドはそれぞれ攻撃に関連するものである。
-必要に応じて解説する。
+概念的には、次のような payload 断片で考えると分かりやすい。
 
 ```json
 {
-    "then": // 省略
-    "status": "resolved_model",
-    "reason": -1,
-    "value": '{"then": "$B0"}',
-    "_response": {
-        (省略))
-        },
-    },
+  "then": "$1:__proto__:then"
 }
 ```
 
-なお、`_response`プロパティについては、
-ここでもプロトタイプトラバーサルを用いて、以後の RCE 発火に必要な準備を行っている。
-詳細は後述する。
+ここで `"$1"` 側は `"$@0"` で得た raw chunk を参照し、`__proto__:then` の path traversal で `Chunk.prototype.then` に到達する。これにより、root chunk の revive 結果である plain object に `then` が移植される。
 
-### チャンク偽造オブジェクトの振る舞いと 第二段階への橋渡し
+第1段階で組み上がる forged object は、概念的には次のような形である。
 
-今回は、プレーンオブジェクトにチャンクの特性を付与してチャンクとして振る舞わせている。
-ただし、ここで重要なのは、Next.js が最初からこの forged plain object を await しているわけではない、という点である。
-`await decodeReplyFromBusboy(...)` が待っているのは、あくまで `getRoot(response)` が返す root chunk、つまり chunk 0 である。
-
-その chunk 0 の初期化中に `"then": "$1:__proto__:then"` が評価され、
-`Chunk.prototype.then` が plain object に移植される。
-その結果、chunk 0 の解決値が thenable 形状になり、
-通常の JavaScript の thenable assimilation によって recovered した `then` が呼び出される。
-
-言い換えると、`$@0` 自体が critical な `then` 呼び出しを起こすわけではない。
-`$@0` は chunk 0 そのものを返す参照 primitive に過ぎず、
-実際の橋渡しは root chunk 解決後の thenable assimilation で起きる。
-
-https://github.com/vercel/next.js/blob/0e973f71f133f4a0b220bbf1e3f0ed8a7c75e00d/packages/next/src/server/app-render/action-handler.ts#L879C1-L883C16
-
-```js
-boundActionArguments = await decodeReplyFromBusboy(busboy, serverModuleMap, {
-  temporaryReferences,
-});
+```text
+第1段階の成果:
+  forgedObject = {
+    then: Chunk.prototype.then,
+    status: RESOLVED_MODEL 相当,
+    value: 二回目 revive 用 model,
+    reason: rootReference 調整用値,
+    _response: forgedResponse
+  }
 ```
 
-then プロパティには 先程 Chunk.prototype.then を設定したため、
-チャンク特有の初期化処理が実行される。
+ここで `reason` は、二回目の `initializeModelChunk` で `rootReference` を扱わせるための調整値である。既存の PoC では `-1` を与えることで `rootReference` を `undefined` 扱いに寄せていた。
 
-この部分は安全側の動的解析でも裏が取れている。
-危険な RCE 文字列は使わず、
-最終的に `["trace-stage1", "from-forged-thenable"]` という harmless な配列が Server Action の引数に復元される payload を送ると、
-field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第一段階は成立した。
+また、二回目の revive に必要な下準備の一部は、実はこの第1段階の中で既に終わっている。具体的には、`_response._formData.get = "$1:constructor:constructor"` のような二回目の prototype traversal は、第3段階の `"$B0"` 評価時ではなく、第1段階で `_response` を revive するときに解決される。
 
-## 第二段階: チャンク初期化処理、デシリアライズ二回目と RCE ガジェットの発火
+この時点では、まだ RCE は起きていない。第1段階の目的は、root chunk の復元値である plain object を thenable 化することである。
 
-### `initializeModelChunk`関数の呼び出し
+# 第2段階: 1回目の攻撃的 thenable assimilation
 
-いよいよチャンクの初期化処理が開始される。
+第1段階で root chunk `0` が解決されると、その解決値である forged object が Promise の resolve に渡される。
 
-参考までに、Chunk.prototype.then のコードは以下の通り。
-チャンク初期化処理において、this パラメータは偽造したチャンクオブジェクトである。
+しかし forged object は `then` を持つ。そのため JavaScript の Promise 解決処理は、通常どおり `forgedObject.then(resolve, reject)` を呼ぶ。MDN の説明どおり、Promise は thenable を受け取ると、その `then` を保存して後で `resolve` / `reject` callback とともに呼び出す。
 
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L124C1-L165C3
+この場面を具体化すると、実体は次になる。
+
+```text
+forgedObject.then(resolve1, reject1)
+  ↓
+Chunk.prototype.then.call(forgedObject, resolve1, reject1)
+```
+
+ここでの `this` は本物の chunk ではなく、第1段階で作られた forged plain object である。しかし `Chunk.prototype.then` は `this.status`, `this.value`, `this.reason`, `this._response` のような構造を前提に処理を進めるため、必要な形が揃っていると forged object を chunk のように扱ってしまう。
+
+`Chunk.prototype.then` の relevant な骨格は、次のとおりである。
 
 ```js
-Chunk.prototype.then = function <T>(
-  this: SomeChunk<T>,
-  resolve: (value: T) => mixed,
-  reject: (reason: mixed) => mixed
-) {
-  const chunk: SomeChunk<T> = this;
-  // If we have resolved content, we try to initialize it first which
-  // might put us back into one of the other states.
+Chunk.prototype.then = function (resolve, reject) {
+  const chunk = this;
   switch (chunk.status) {
     case RESOLVED_MODEL:
       initializeModelChunk(chunk);
       break;
   }
-  // The status might have changed after initialization.
   switch (chunk.status) {
     case INITIALIZED:
       resolve(chunk.value);
       break;
-    case PENDING:
-    case BLOCKED:
-    case CYCLIC:
-      if (resolve) {
-        if (chunk.value === null) {
-          chunk.value = ([]: Array<(T) => mixed>);
-        }
-        chunk.value.push(resolve);
-      }
-      if (reject) {
-        if (chunk.reason === null) {
-          chunk.reason = ([]: Array<(mixed) => mixed>);
-        }
-        chunk.reason.push(reject);
-      }
-      break;
-    default:
-      reject(chunk.reason);
-      break;
+    // ...
   }
 };
 ```
 
-ステータスが`RESOLVED_MODEL`である場合、
-チャンクが解決されたと認識し、`initializeModelChunk`関数を呼び出す。
+そのため、第2段階の成果は次の一文に尽きる。
 
-先ほど、偽造したチャンクには、
-"status": "resolved_model",
-が設定されていた。
-この設定をしたのは、チャンク初期化処理を開始させる条件を満たすためである。
+```text
+第2段階の成果:
+  forgedObject.status が RESOLVED_MODEL 相当なので
+  initializeModelChunk(forgedObject) に進む
+```
 
-こうして、初期化処理として`initializeModelChunk`関数が呼び出される。
-前述したが、該当する実装を再掲する。
+ここでもまだ RCE は起きていない。起きているのは「root chunk の解決値が thenable 扱いされ、その borrowed `then` が forged object を chunk として再初期化しに行く」ことだけである。
 
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L446C1-L502C1
+# 第3段階: forged chunk の revive と generated function の生成
+
+第3段階では、borrowed `Chunk.prototype.then` の内部から `initializeModelChunk(forgedObject)` が呼ばれる。
+
+このとき重要なのは、`reviveModel` に渡る response が React runtime が最初に作った本物の response ではなく、forged object の `_response` である点である。
+
+| revive | 対象 chunk | `reviveModel` に渡る response |
+| --- | --- | --- |
+| 1回目 | `rootChunk0` | React runtime が作った本物の response |
+| 2回目 | `forgedObject` | 攻撃者入力から組み立てられた forged response |
+
+二回目の `initializeModelChunk` は、概念的には次の形で進む。
 
 ```js
 function initializeModelChunk(chunk) {
@@ -613,157 +622,84 @@ function initializeModelChunk(chunk) {
     rawModel,
     rootReference
   );
-  // ...INITIALIZED/BLOCKED/ERRORED への状態遷移...
+  // ...
 }
 ```
 
-rootReference について説明する。
-reason プロパティが -1 の場合、rootReference は undefined になる。
-これは、以後の`reviveModel`関数内で 処理を正常に進行させるためである。
+ここで chunk の `value` には、二回目 revive 用の model、たとえば `{"then":"$B0"}` のような文字列が入っている。そして `"$B0"` は、`response._formData.get(response._prefix + id)` の戻り値を返す構文である。
 
-前述の通り、`initializeModelChunk` 関数は、
-チャンクオブジェクトの value プロパティを JSON としてパースし、
-デシリアライズを行う責務を持つ。
+通常ならここで Blob のような backing entry が返る想定だが、この段階の response は forged response であり、`_formData.get` が callable な値に置き換えられている。そのため `"$B0"` の戻り値として generated function が得られる。
 
-この関数の内部について解説する。
-value プロパティには、シリアライズされた Flight プロトコルが入っている。
-この文字列に対し、JSON.parse を行った後、reviveModel 関数で Flight プロトコルにおけるデシリアライズを行う。
-この value プロパティに対するデシリアライズが、二回目のデシリアライズにあたる。
+重要なのは、`"$B0"` 自体が直ちに任意コード実行を起こすわけではない点である。この分岐がやっているのは `_formData.get(...)` の戻り値を返すことだけである。危険なのは、その戻り値を `Function` constructor に向けられるよう準備できてしまう点にある。
 
-### 攻撃の理論: `parseModelString`関数内の RCE ガジェット
+このとき二回目の prototype traversal は、`_formData.get = "$1:constructor:constructor"` のような形で `Function` へ到達する。さらに `_prefix` は `response._prefix + id` の形で末尾に id が付くため、PoC では payload 側で末尾に無害な文を置いて trailing `0` を吸収するよう工夫していた。ここでは危険な文字列は省略するが、概念的には「`statement;0` のように末尾を無害化する」ための調整である。
 
-前述の通り、`initializeModelChunk`関数内で
-`reviveModel` 関数からまた呼び出される`parseModelString`関数が
-特定の構文`$B`を解釈したとき、RCE を発生させられる仕組みが存在する。
+第3段階の成果は次のとおりである。
 
-この RCE を発生させられる仕組みを、一般的にガジェットと呼称する。
-
-該当コードを抽出すると、以下のとおりである。
-
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L1059C1-L1068C8
-
-```js
-case 'B': {
-    // Blob
-    const id = parseInt(value.slice(2), 16);
-    const prefix = response._prefix;
-    const blobKey = prefix + id;
-    // We should have this backingEntry in the store already because we emitted
-    // it before referencing it. It should be a Blob.
-    const backingEntry: Blob = (response._formData.get(blobKey): any);
-    return backingEntry;
-}
+```text
+第3段階の成果:
+  forgedObject.value = {
+    then: generatedFunction
+  }
 ```
 
-ここで、
-`$B` 自体が直ちに任意コード実行を起こすわけではないことに注意する。
-この分岐が行うのは、`response._formData.get(blobKey)` を呼び、その戻り値を返すことだけである。
+ここでもまだ RCE は起きていない。第3段階で起きたのは、generated function が作られ、それが `then` プロパティとして配置された object が得られたことだけである。
 
-しかし、攻撃者が一回目のデシリアライズ中に `_formData.get` を `Function` に置き換えておくと、
-runtime 的には `Function(blobKey)` が評価され、生成された関数が返る。
-そして、その生成された関数が次の plain object の `then` になり、
-通常の thenable assimilation によって呼び出される。
+# 第4段階: generated function の then 呼び出し
 
-したがって、任意コード実行ガジェットの最終到達点は `"$B0"` そのものではなく、
-`"$B0"` が返した生成された関数の本体である。
+第3段階で forged object の revive が終わると、borrowed `Chunk.prototype.then` は `resolve1(forgedObject.value)` を呼ぶ。
 
-### ガジェット到達のための工夫
+しかし `forgedObject.value` は `then` を持つ object であり、その `then` は第3段階で生成された generated function である。したがって Promise 解決処理は、もう一度 thenable assimilation を行う。
 
-このガジェットに到達するために、工夫を行う。
-
-まず、
-reviveModel 関数に与える value において、
-以下のようにバイナリデータが読み込まれる構文、$B を利用し、
-条件分岐に到達できるようにする。
-
-```
-    "value": '{"then": "$B0"}',
+```text
+resolve1({ then: generatedFunction })
+  ↓
+Promise detects thenable
+  ↓
+generatedFunction(resolve2, reject2)
+  ↓
+generated function body is evaluated
 ```
 
-次に、Flight プロトコルのデシリアライズにおいて
-プロトタイプトラバーサルを行う。
+RCE の直接発火点は `"$B0"` ではない。また、`Function(...)` によって generated function が作られた瞬間でもない。本当の発火点は、generated function が thenable assimilation により `then(resolve, reject)` として呼ばれる瞬間である。
 
-Flight プロトコルのシリアライズでは前述の通り、
-ID の指定によるプロトタイプトラバーサルが可能である。
-今回もこれを利用することができる。
-これが二回目のプロトタイプトラバーサルである。
+第4段階だけを見ると、React 独自の魔法ではなく、JavaScript 標準の Promise 解決ルールが最終トリガになっていることが分かる。
 
-なお、ID の指定によるプロトタイプトラバーサルは、
-`parseModelString`関数内で、`getOutlinedModel`関数が呼び出されることで
-実現されることは、前述の通りである。
+# 何が問題だったのか
 
-まず、`_formData.get` プロパティに
-`$1:constructor:constructor`な値を指定することで、
-`Function` コンストラクタを埋め込む。
-また、`_prefix` プロパティに任意実行したいコマンドを埋め込む。
-これにより、`"$B0"` を踏んだときに生成された関数を作る準備が整う。
+ここまでの流れを第0段階から第4段階に対応づけると、問題は次のように整理できる。
 
-この点も実際にコードを追い直すと重要で、
-`_response._formData.get = "$1:constructor:constructor"` という二回目のプロトタイプトラバーサルは、
-第二段階の `"$B0"` 評価中に行われるのではなく、
-一回目の `initializeModelChunk(chunk0)` の中で `_response` を revive するときに解決される。
-つまり、第二段階のための下準備は、第一段階のデシリアライズ中に完了する。
+| 問題 | 対応段階 | 内容 |
+| --- | --- | --- |
+| 未信頼 input が Flight revive に到達する | 第0〜第1段階 | Server Action の引数復元経路が入口になる |
+| raw chunk 参照が可能 | 第1段階 | `"$@"` により chunk object へ到達できる |
+| prototype traversal が可能 | 第1・第3段階 | `__proto__` / `constructor` 経由で prototype 上の値へ到達できる |
+| plain object を chunk として扱える | 第2〜第3段階 | brand check ではなく構造的に処理が進む |
+| `_formData.get` の戻り値を信頼する | 第3段階 | `"$B"` 分岐が想定型を十分に検証しない |
+| thenable assimilation が実行トリガになる | 第2・第4段階 | JS 標準挙動により `then(resolve, reject)` が呼ばれる |
 
-なお、blobKey に該当する値は
-`response._prefix + id`で作成されるが、
-このとき id の存在を無視できるようにする必要がある。
-これについては、`_prefix` プロパティ、つまり任意コードの最後にセミコロンを入れることで、
-`id` の値を無視できるようになる。
-例えば、`process.mainModule.require(...);0`のようにする。
-この技巧は、末尾に付いてくる `id` を独立した `0` 文として無害化するためのものである。
+文章としてまとめると、react2shell は単一のバグというより、複数の前提が連鎖した結果である。
 
-### `_formData` と `_prefix` の与え方
+第一に、Flight の outlined model 参照が prototype chain 上の property まで辿れてしまった。第二に、plain object であっても `status`, `value`, `reason`, `_response`, `then` が揃うと、chunk のように扱われてしまった。第三に、`"$B"` 分岐が `_formData.get(...)` の戻り値を十分に検証せず、generated function を返す余地があった。最後に、その generated function が JavaScript の thenable assimilation により `then(resolve, reject)` として呼ばれた。
 
-`_formData`と`_prefix`を含む`_response`プロパティの与え方を説明する。
-`reviveModel`関数の呼び出し部分は以下のようになっている。
+つまり、`"$@0"` も `"$B0"` も、それ自体が最終爆発点ではない。どちらも「次の then を呼ばせるための足場」として悪用されている。
 
-https://github.com/facebook/react/blob/06cfa99f3740c4b8c16c8d63d97b0f52d90eec43/packages/react-server/src/ReactFlightReplyServer.js#L468C1-L474C7
+# 動的解析で確認したこと
 
-```js
-function initializeModelChunk<T>(chunk: ResolvedModelChunk<T>): void {
-  // 省略
-  const value: T = reviveModel(
-    chunk._response,
-    { "": rawModel },
-    "",
-    rawModel,
-    rootReference
-  );
-  // 省略
-}
-```
+既存の安全側の動的解析で確認した内容を、新しい第0段階から第4段階のモデルに沿って整理し直す。
 
-つまり、
-チャンクに`_response`プロパティを与えることで、
-レスポンスの値が`reviveModel`関数に渡される。
-そのため、ガジェットの発火に十分なデータを与えることが出来る。
+前提として、動的解析では危険な OS コマンドは実行せず、trace 用の harmless payload に差し替えて検証した。本番環境への試行も行っていない。
 
-```json
-    "_response": {
-        "_prefix": f"(任意コードなので省略)",
-        "_formData": {
-            "get": "(省略)",
-        },
-```
+確認できたことは次のとおりである。
 
-ここまでの流れにより、任意コード実行が可能となる。
-まず生成されるコードを再現すると、以下のとおりとなる。
+1. 第1段階では、root chunk の revive により plain object に `Chunk.prototype.then` が移植され、forged object が thenable として扱われること。
+2. 第2段階では、root chunk の解決値に対して thenable assimilation が走り、borrowed `Chunk.prototype.then` が呼ばれること。
+3. 第3段階では、forged object が chunk として再び `initializeModelChunk` に入り、`"$B0"` から generated function が得られること。
+4. 第4段階では、その generated function が `then(resolve, reject)` として呼ばれ、関数本体が Node.js 側で評価されること。
 
-```js
-const generatedThen = Function("process.mainModule.require(...);0");
-```
+第1段階については、`["trace-stage1", "from-forged-thenable"]` という harmless な配列が Server Action の引数に復元される payload を送ると、field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第一段階は成立した。これは、`"$@0"` が raw chunk 参照 primitive として働き、root chunk の revive 中に plain object へ `Chunk.prototype.then` を移植できることを裏づけている。
 
-そして、本当に危険なのは、この `generatedThen` が第二段階の `then` として扱われ、
-通常の thenable assimilation により次のように呼ばれる点である。
-
-```js
-generatedThen(resolve, reject);
-```
-
-この時点で、関数本体に埋め込んだ文が Node サーバ上で評価される。
-
-この点も安全側の動的解析で裏を取ることができた。
-実際には危険なコマンド文字列の代わりに、
+第4段階については、危険な RCE 文字列ではなく、生成された関数の本体に harmless な trace を埋め込んで確認した。使った本体は次のとおりである。
 
 ```js
 console.log("[stage2-generated-then]", JSON.stringify({
@@ -774,67 +710,59 @@ console.log("[stage2-generated-then]", JSON.stringify({
 arguments[0](["trace-stage2-log", "from-generated-then-log"]);
 ```
 
-のような harmless な本体を埋め込んだところ、
-サーバログには
+この payload ではサーバログに次が出力された。
 
 ```text
 [stage2-generated-then] {"arg0Type":"function","arg1Type":"function","processType":"object"}
 ```
 
-が出力された。
-これは、生成された関数の本体が実際に `then(resolve, reject)` として呼ばれ、
-しかも Node サーバの `process` を見られる文脈で実行されていることを意味する。
+これは、generated function の本体が実際に `then(resolve, reject)` として呼ばれ、しかも Node サーバの `process` を見られる文脈で実行されていることを意味する。
 
-なお、第二段階についても危険な RCE 文字列は使わず、
-`["trace-stage2", "from-generated-then"]` を resolve する safe payload で動的解析を行った。
-その結果、field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第二段階まで成立した。
+さらに、危険な RCE 文字列は使わず、`["trace-stage2", "from-generated-then"]` を resolve する safe payload でも動的解析を行った。その結果、field 順序が `0 -> 1`、`1 -> 0`、`0 -> file -> 1` のいずれでも第4段階まで成立した。
 
-# 何が問題だったのか
-
-ここまでの流れを踏まえると、react2shell PoC が成立した理由は、単一の「魔法の文字列」があったからではない。複数の前提が同時に揃っていたことが問題だった。
-
-第一に、`getOutlinedModel` が `__proto__` や `constructor` を含む path を own-property 制約なしで辿れてしまった。これにより、本来は単なるデータであるはずの Flight 参照文字列から、prototype chain 上の `then` や `Function` に到達できた。
-
-第二に、runtime は攻撃者が与えた plain object であっても、`status` / `value` / `reason` / `_response` / `then` といった形が揃っていれば、実質的に chunk と同じように扱ってしまう。つまり、ブランドチェックではなく構造的な扱いをしていたことが、第一段階から第二段階への橋渡しになっている。
-
-第三に、`parseModelString` の `case 'B'` は `_formData.get(...)` の戻り値を実行時に Blob だと検証していない。そのため、第一段階で `_formData.get = Function` を仕込めてしまうと、`"$B0"` は `Function(_prefix + "0")` に等価になり、生成された関数を返せてしまう。
-
-最後に、この生成された関数を本当に動かしているのは React 独自の特別な仕組みではなく、通常の JavaScript の thenable assimilation である。`$@` も `$B` も単体では終点ではなく、どちらも「次の then を呼ばせるための足場」として悪用されている。PoC の本質は、この足場作りが二段階にわたって噛み合ってしまう点にある。
+要するに、安全側の動的解析で裏が取れたのは次の一点である。第1段階で plain object が thenable 化され、第2段階で borrowed `then` が動き、第3段階で generated function が作られ、第4段階でその generated function が本当に `then(resolve, reject)` として呼ばれる。
 
 # まとめ
 
-今回の react2shell PoC の本質は、
-Flight プロトコルにおける二回のデシリアライズと、
-その間に二回のプロトタイプトラバーサルを差し込めてしまう点にある。
+react2shell PoC は、`"$@0"` や `"$B0"` のような単一の特殊構文が直接 RCE を起こす脆弱性ではない。
 
-第一段階では、`$@0` が chunk 0 そのものを返すことを利用して、
-`Chunk.prototype.then` を plain object に移植し、
-復元値を thenable として振る舞わせる。
-ただし、`$@0` 自体が `then` を呼ぶのではなく、
-root chunk 解決後の通常の thenable assimilation が橋渡しをしている。
+第0段階で `decodeReplyFromBusboy` が root chunk `0` を返し、第1段階で root chunk の revive により plain object が thenable 化される。第2段階では、その plain object が JavaScript の thenable assimilation により borrowed `Chunk.prototype.then` として呼ばれる。第3段階では forged object が chunk として再び revive され、`"$B0"` を通じて generated function が `then` として得られる。第4段階では、その generated function が再び thenable assimilation により `then(resolve, reject)` として呼ばれ、ここで初めて関数本体が実行される。
 
-第二段階では、第一段階で forged した `_response` を通して
-`_formData.get = Function` を仕込み、`"$B0"` の戻り値として生成された関数を作る。
-そして本当に危険なのは、その生成された関数が次の `then` として呼ばれ、
-その本体が Node サーバ上で評価される点である。
+したがって、この PoC の本質は、二回の Flight revive と二回の攻撃的 thenable assimilation が交互に噛み合うことで、データとして送られた値が最終的に実行可能な `then` へ昇格してしまう点にある。
 
-少なくとも、危険な RCE 文字列を使わない安全側の動的解析では、
-この第一段階・第二段階の両方が脆弱版環境で end-to-end に成立することを確認できた。
-したがって、PoC の説明としては、
-「`$@` と `"$B"` がそれ自体で発火する」のではなく、
-「それらを足場にして thenable assimilation まで繋げることで最終的に生成された関数の本体が実行される」
-と書くのが、現時点では最も正確だと考えている。
+従来の「二回のデシリアライズと二回のプロトタイプトラバーサル」という整理は、処理の一部を捉えている。ただし、読者が RCE 発火点を正確に追うには、それだけでは足りない。`decodeReplyFromBusboy` から root chunk が返り、root chunk revive、forged object の `then` 呼び出し、forged chunk revive、generated function の `then` 呼び出しまでを、第0段階から第4段階として順に追う方が、実装上の流れと一致している。
 
 # 参考文献
 
-maple3142 氏による 発端の PoC コード
-https://gist.github.com/maple3142/48bc9393f45e068cf8c90ab865c0f5f3
-
-msanft 氏による PoC の解説リポジトリ
-https://github.com/msanft/CVE-2025-55182/
-
-Guillermo Rauch 氏による脆弱性報告ツイート
-https://x.com/rauchg/article/1997362942929440937
-
-Lachlan Davidson 氏による報告時の PoC リポジトリ
-https://github.com/lachlan2k/React2Shell-CVE-2025-55182-original-poc
+- React 公式ドキュメント: Server Components  
+  https://react.dev/reference/rsc/server-components
+- React 公式ドキュメント: `'use server'` / Server Functions  
+  https://react.dev/reference/rsc/use-server
+- Next.js 公式ドキュメント: Mutating Data / Server Functions and Server Actions  
+  https://nextjs.org/docs/app/getting-started/mutating-data
+- Next.js 公式ドキュメント: Forms  
+  https://nextjs.org/docs/app/guides/forms
+- Busboy README  
+  https://github.com/mscdex/busboy
+- RFC 7578: `multipart/form-data`  
+  https://www.rfc-editor.org/rfc/rfc7578
+- MDN: `Function()` constructor  
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
+- MDN: Promise resolution and thenables  
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/Promise
+- MDN: `Promise.prototype.then()`  
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/then
+- React source: `decodeReplyFromBusboy`  
+  https://github.com/facebook/react/blob/6de32a5a07958d7fc2f8d0785f5873d2da73b9fa/packages/react-server-dom-webpack/src/server/ReactFlightDOMServerNode.js
+- React source: `createResponse`, `getChunk`, `resolveField`, `resolveModelChunk`, `initializeModelChunk`, `parseModelString`  
+  https://github.com/facebook/react/blob/6de32a5a07958d7fc2f8d0785f5873d2da73b9fa/packages/react-server/src/ReactFlightReplyServer.js
+- Next.js source: action handler  
+  https://github.com/vercel/next.js/blob/c09c5f9e278e46b0923c96ef5cf8a6bd9edbaf80/packages/next/src/server/app-render/action-handler.ts
+- maple3142 氏による発端の PoC コード  
+  https://gist.github.com/maple3142/48bc9393f45e068cf8c90ab865c0f5f3
+- msanft 氏による PoC の解説リポジトリ  
+  https://github.com/msanft/CVE-2025-55182/
+- Guillermo Rauch 氏による脆弱性報告ポスト  
+  https://x.com/rauchg/article/1997362942929440937
+- Lachlan Davidson 氏による報告時の PoC リポジトリ  
+  https://github.com/lachlan2k/React2Shell-CVE-2025-55182-original-poc
