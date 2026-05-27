@@ -623,28 +623,6 @@ JWK の `kty` や鍵パラメータを見て、
 最終的には、利用者が許可アルゴリズムを明示する allowlist を主軸にし、
 HS 系の拒否と JWK `alg` の整合性チェックを組み合わせる形にしました。
 
-## 他のフレームワーク・ライブラリの対応
-
-### `jsonwebtoken` (Node.js)
-
-Node.js で最も広く使われている JWT ライブラリです。`verify()` には `algorithms` オプションがあり、許可するアルゴリズムをホワイトリスト形式で渡すことが推奨されています。
-
-```typescript
-jwt.verify(token, publicKey, { algorithms: ['RS256'] }, callback)
-```
-
-実は `jsonwebtoken` も過去に同様の問題を経験しています。バージョン 8.5.1 以前では、`algorithms` 未指定かつ秘密鍵が falsy な場合に `none` アルゴリズムにフォールバックし、署名検証をバイパスできてしまう脆弱性が存在していました (GHSA-qwph-4952-7xr6)。v9.0.0 でデフォルトの `none` サポートが除去されています。
-
-### `@fastify/jwt`
-
-Fastify の JWT プラグインは `algorithms` オプションで許可アルゴリズムの一覧を指定できます。執筆時点の `@fastify/jwt` v10.1.0 では、内部で `fast-jwt` を使用しています。
-
-### `elysia-jwt`
-
-Elysia の JWT プラグインは内部で `jose` ライブラリを使用しています。`alg` オプションでアルゴリズムを指定でき、`jose` は JOSE/JWT 検証で鍵・アルゴリズムの整合性を扱うライブラリです。
-
-いずれのライブラリも、検証時に許可アルゴリズムを指定できる導線を持っています。これは偶然ではなく、アルゴリズム混同攻撃への対策が業界標準として浸透してきた結果です。
-
 # 修正までの流れ
 
 ## GitHub の Private Vulnerability Reporting
@@ -876,6 +854,560 @@ JWKS は公開鍵を配布する仕組みです。JWKS で対称鍵 (`kty: oct`)
 セキュリティライブラリを使っていても、設定が不適切であれば意味がありません。今回の Hono の修正はまさにこの点を突いています。「デフォルト値で動く」ことと「安全に動く」ことは別の話です。
 
 ライブラリの主要な設定項目と、各設定が何を意味するかを把握した上で使うようにしてください。また、セキュリティアドバイザリは定期的に確認する習慣をつけると良いと思います。
+
+
+## 他のフレームワーク・ライブラリの対応
+
+ここまで Hono の実装を見てきましたが、
+同じような問題が他のフレームワークや JWT ライブラリで
+どう扱われているのかも気になります。
+
+そこで、2026 年 5 月 20 日時点の現行実装について、
+TypeScript / JavaScript の代表的な Web フレームワークである
+Express.js / Fastify / Elysia.js の JWT/JWK 関連ライブラリを中心に、
+今回の問題に関連するアルゴリズム指定の扱いを比較してみました。
+
+先にまとめると、各フレームワーク本体は JWT/JWK 検証機能を直接持っているわけではありません。
+実際の比較対象になるのは、次のような周辺ライブラリです。
+
+| フレームワーク | 代表的な JWT/JWKS 関連ライブラリ | 現在の状況 |
+| --- | --- | --- |
+| Express.js | `express-jwt`, `jsonwebtoken`, `jwks-rsa` | `express-jwt` は `algorithms` 必須。`jsonwebtoken` も鍵種別と alg の整合性をチェック |
+| Fastify | `@fastify/jwt`, `fast-jwt` | `algorithms` は必須ではないが、現行 `fast-jwt` は鍵種別から許可 alg を推定し、公開鍵を HMAC secret として扱いにくい |
+| Elysia.js | `@elysiajs/jwt`, `jose` | `jose` が鍵種別と alg を明示的に検査。JWKS resolver も alg から `kty` を導出して絞り込む |
+
+### Express.js / `express-jwt` / `jsonwebtoken` / `jwks-rsa`
+
+Express.js 本体には JWT/JWK 検証機能はありません。
+そのため、Express における現実的な比較対象は `express-jwt`、その内部で使われる `jsonwebtoken`、
+そして JWKS から署名鍵を取得するためによく使われる `jwks-rsa` です。
+
+まず、現行の `express-jwt` は `algorithms` を必須にしています。
+
+```typescript
+export const expressjwt = (options: Params) => {
+  if (!options?.secret) throw new RangeError('express-jwt: `secret` is a required option');
+  if (!options.algorithms) throw new RangeError('express-jwt: `algorithms` is a required option');
+  if (!Array.isArray(options.algorithms)) throw new RangeError('express-jwt: `algorithms` must be an array');
+
+  // ...
+
+  const key = await getVerificationKey(req, decodedToken);
+
+  try {
+    await jwt.verify(token, key, options);
+  } catch (err) {
+    // ...
+  }
+}
+```
+
+ここで `algorithms` が必須になっているのは重要です。
+Hono の JWT middleware で問題になった「利用者が alg を明示しなかった場合の危険なフォールバック」が、
+`express-jwt` の現行実装では起動時に拒否されます。
+
+JWKS を使う場合によく組み合わせられる `jwks-rsa` の Express integration も、
+JWT ヘッダの `alg` を見て、対応する署名アルゴリズムだけを許可しています。
+
+```javascript
+const allowedSignatureAlg = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA'
+];
+```
+
+```javascript
+const expressJwt7Provider = async (req, token) => {
+  if (!token) { return; }
+  const header = token.header;
+  if (!header || !supportedAlg.includes(header.alg)) {
+    return;
+  }
+  try {
+    const key = await client.getSigningKey(header.kid);
+    return key.publicKey || key.rsaPublicKey;
+  } catch (err) {
+    // ...
+  }
+};
+```
+
+この時点で `HS256` は JWKS から公開鍵を取得する対象に含まれません。
+つまり、攻撃者が JWT ヘッダに `alg: "HS256"` を入れても、
+`jwks-rsa` は RSA 公開鍵を HMAC secret として返す方向には進みにくい実装になっています。
+
+さらに、`jsonwebtoken` 本体でも鍵の種類と `alg` の整合性をチェックしています。
+
+```javascript
+if (secretOrPublicKey != null && !(secretOrPublicKey instanceof KeyObject)) {
+  try {
+    secretOrPublicKey = createPublicKey(secretOrPublicKey);
+  } catch (_) {
+    try {
+      secretOrPublicKey = createSecretKey(
+        typeof secretOrPublicKey === 'string'
+          ? Buffer.from(secretOrPublicKey)
+          : secretOrPublicKey
+      );
+    } catch (_) {
+      return done(new JsonWebTokenError('secretOrPublicKey is not valid key material'))
+    }
+  }
+}
+
+if (!options.algorithms) {
+  if (secretOrPublicKey.type === 'secret') {
+    options.algorithms = HS_ALGS;
+  } else if (['rsa', 'rsa-pss'].includes(secretOrPublicKey.asymmetricKeyType)) {
+    options.algorithms = RSA_KEY_ALGS
+  } else if (secretOrPublicKey.asymmetricKeyType === 'ec') {
+    options.algorithms = EC_KEY_ALGS
+  } else {
+    options.algorithms = PUB_KEY_ALGS
+  }
+}
+
+if (options.algorithms.indexOf(decodedToken.header.alg) === -1) {
+  return done(new JsonWebTokenError('invalid algorithm'));
+}
+
+if (header.alg.startsWith('HS') && secretOrPublicKey.type !== 'secret') {
+  return done(new JsonWebTokenError(
+    `secretOrPublicKey must be a symmetric key when using ${header.alg}`
+  ))
+} else if (/^(?:RS|PS|ES)/.test(header.alg) && secretOrPublicKey.type !== 'public') {
+  return done(new JsonWebTokenError(
+    `secretOrPublicKey must be an asymmetric key when using ${header.alg}`
+  ))
+}
+```
+
+ここでは、PEM 文字列などの鍵素材をまず Node.js の `KeyObject` に変換し、
+その結果が `secret` なのか `public` なのかを見ています。
+そのうえで、`HS*` なら `secret` 型でなければならず、
+`RS*` / `PS*` / `ES*` なら `public` 型でなければならない、という検査を行っています。
+
+このため、現行の `jsonwebtoken` では、
+RSA 公開鍵をそのまま `HS256` の HMAC secret として使う古典的なアルゴリズム混同攻撃は通りにくくなっています。
+
+ただし、`jsonwebtoken` も過去に JWT 検証まわりの脆弱性を経験しています。
+`CHANGELOG.md` には v9 系で修正されたものとして、次のような項目が並んでいます。
+
+```text
+- security: fixes `Insecure default algorithm in jwt.verify() could lead to signature validation bypass` - CVE-2022-23540
+- security: fixes `Insecure implementation of key retrieval function could lead to Forgeable Public/Private Tokens from RSA to HMAC` - CVE-2022-23541
+- security: fixes `Unrestricted key type could lead to legacy keys usage` - CVE-2022-23539
+```
+
+特に CVE-2022-23541 は、鍵取得関数の実装次第で RSA/HMAC の混同につながりうる問題です。
+これは Hono の今回の問題と完全に同じ実装バグではありませんが、
+「検証鍵を動的に解決する処理」と「JWT ヘッダの alg」が絡むと、
+同じ種類の設計ミスが繰り返し発生しうることを示しています。
+
+現在の Express 系の推奨形は、次のように `algorithms` を明示する形です。
+
+```typescript
+app.use(jwt({
+  secret: expressJwtSecret({
+    jwksUri: 'https://example.com/.well-known/jwks.json'
+  }),
+  audience: '...',
+  issuer: '...',
+  algorithms: ['RS256']
+}))
+```
+
+Hono の修正方針と同じく、
+「JWT ヘッダに書かれている `alg` をそのまま信じる」のではなく、
+アプリケーション側が受け入れるアルゴリズムを設定として固定する設計です。
+
+### Fastify / `@fastify/jwt` / `fast-jwt`
+
+Fastify 本体にも JWT/JWK 検証機能はありません。
+公式プラグインとしてよく使われる `@fastify/jwt` は、内部で `fast-jwt` を使っています。
+
+`@fastify/jwt` の特徴は、`algorithms` が必須ではない点です。
+README でも、`verify.algorithms` について次のように説明されています。
+
+```text
+algorithms: List of strings with the names of the allowed algorithms.
+By default, all algorithms are accepted.
+```
+
+一見すると、これは Hono の問題に近く見えます。
+しかし現行の `fast-jwt` は、鍵の内容から利用可能なアルゴリズムを検出し、
+RSA 公開鍵を HMAC secret として扱わないようにしています。
+
+`@fastify/jwt` 側では、登録時の `secret` を署名用と検証用に分け、
+検証時には `fast-jwt` の `createVerifier()` に渡しています。
+
+```javascript
+const { createSigner, createDecoder, createVerifier, TokenError } = require('fast-jwt')
+
+// ...
+
+let secretOrPrivateKey
+let secretOrPublicKey
+
+if (typeof secret === 'object' && !Buffer.isBuffer(secret)) {
+  if (!secret.public) {
+    return next(new Error('missing public key'))
+  }
+  secretOrPrivateKey = secret.private
+  secretOrPublicKey = secret.public
+} else {
+  secretOrPrivateKey = secretOrPublicKey = secret
+}
+
+// ...
+
+const verifierConfig = checkAndMergeVerifyOptions()
+const verifier = createVerifier(verifierConfig.options)
+```
+
+そして `fast-jwt` 側では、`algorithms` が指定されていない場合でも、
+鍵から利用可能なアルゴリズムを検出します。
+
+```javascript
+if (key && keyType !== 'function') {
+  // Detect the private key - If the algorithms were known, just verify they match, otherwise assign them
+  const availableAlgorithms = detectPublicKeyAlgorithms(key)
+
+  if (allowedAlgorithms.length) {
+    checkAreCompatibleAlgorithms(allowedAlgorithms, availableAlgorithms)
+  } else {
+    allowedAlgorithms = availableAlgorithms
+  }
+
+  key = prepareKeyOrSecret(key, availableAlgorithms[0] === hsAlgorithms[0])
+}
+```
+
+`detectPublicKeyAlgorithms()` の中では、PEM 形式の公開鍵かどうかを見ています。
+
+```javascript
+const privateKeyPemMatcher = /^-----BEGIN(?: (RSA|EC|ENCRYPTED))? PRIVATE KEY-----/
+const publicKeyPemMatcher = /^-----BEGIN(?: (RSA))? PUBLIC KEY-----/
+
+function performDetectPublicKeyAlgorithms(key) {
+  const trimmedKey = key.trim()
+  const publicKeyPemMatch = trimmedKey.match(publicKeyPemMatcher)
+
+  if (trimmedKey.match(privateKeyPemMatcher)) {
+    throw new TokenError(TokenError.codes.invalidKey, 'Private keys are not supported for verifying.')
+  } else if (publicKeyPemMatch && publicKeyPemMatch[1] === 'RSA') {
+    // pkcs1 format - Can only be RSA key
+    return rsaAlgorithms
+  } else if (!publicKeyPemMatch && !trimmedKey.includes(publicKeyX509CertMatcher)) {
+    // Not a PEM, assume a plain secret
+    return hsAlgorithms
+  }
+
+  // ...
+
+  switch (oid) {
+    case '1.2.840.113549.1.1.1': // RSA
+      return rsaAlgorithms
+    case '1.2.840.10045.2.1': // EC
+      // ...
+  }
+}
+```
+
+つまり、検証鍵が RSA 公開鍵 PEM であれば `rsaAlgorithms`、
+通常の文字列 secret であれば `hsAlgorithms` と分類されます。
+その後、JWT ヘッダの `alg` が `allowedAlgorithms` に含まれるかを確認してから署名検証します。
+
+```javascript
+function validateAlgorithmAndSignature(input, header, signature, key, allowedAlgorithms) {
+  if (!allowedAlgorithms.includes(header.alg)) {
+    throw new TokenError(TokenError.codes.invalidAlgorithm, 'The token algorithm is invalid.')
+  }
+
+  if (signature && !verifySignature(header.alg, key, input, signature)) {
+    throw new TokenError(TokenError.codes.invalidSignature, 'The token signature is invalid.')
+  }
+}
+```
+
+このため、現行の `fast-jwt` では、
+RSA 公開鍵を渡している状態で `alg: HS256` の偽造トークンを通すことは難しくなっています。
+`algorithms` が未指定でも、鍵側から導出された `allowedAlgorithms` が RSA 系に絞られるためです。
+
+一方で、`fast-jwt` には過去にこの周辺の回帰テストが追加されています。
+たとえば、公開鍵 PEM の先頭に空白を入れることで `^-----BEGIN PUBLIC KEY-----` のような判定をすり抜け、
+公開鍵が HMAC secret と誤分類されることを防ぐテストです。
+
+```javascript
+// GHSA-mvf2-f6gm-w987: leading whitespace must not defeat the ^ anchor and cause
+// an RSA/EC/Ed public key to be misclassified as an HMAC secret.
+test('detectPublicKeyAlgorithms - RSA public key with leading whitespace must be detected as RSA (not HMAC)', t => {
+  for (const prefix of leadingWhitespacePrefixes) {
+    t.assert.deepStrictEqual(
+      detectPublicKeyAlgorithms(prefix + publicKeys.RS.toString('utf-8')),
+      rsaAlgorithms
+    )
+  }
+})
+```
+
+これはまさに「公開鍵を HMAC secret と誤認する」系の問題を意識した防御です。
+現行実装では `key.trim()` したうえで PEM を判定するため、
+先頭空白による誤分類が起きにくくなっています。
+
+ただし、Fastify 系については注意点もあります。
+`@fastify/jwt` の `verify.algorithms` は必須ではありません。
+したがって、現行 `fast-jwt` の鍵種別検出に守られているとはいえ、
+アプリケーション側で明示的に許可アルゴリズムを固定しておく方が安全です。
+
+```javascript
+fastify.register(jwt, {
+  secret: {
+    public: publicKey,
+    private: privateKey
+  },
+  sign: {
+    algorithm: 'RS256'
+  },
+  verify: {
+    algorithms: ['RS256']
+  }
+})
+```
+
+現状の評価としては、
+**通常の RSA 公開鍵 PEM を使う限り、Hono の JWK middleware と同じ形で悪用可能とは言いにくい**です。
+ただし、`algorithms` を必須化している `express-jwt` と比べると、
+設定ミスを防ぐ設計としては少し弱い、というのが私の見方です。
+
+### Elysia.js / `@elysiajs/jwt` / `jose`
+
+Elysia.js 本体にも JWT/JWK 検証機能はありません。
+公式プラグインの `@elysiajs/jwt` は、内部で `jose` を利用しています。
+
+`@elysiajs/jwt` は、文字列の `secret` を `Uint8Array` に変換し、
+署名時はデフォルトで `HS256` を使います。
+検証時は `jose` の `jwtVerify()` に処理を委譲しています。
+
+```typescript
+const key =
+  typeof secret === 'string' ? new TextEncoder().encode(secret) : secret
+
+// ...
+
+let jwt = new SignJWT({ ...JWTPayload }).setProtectedHeader({
+  alg: JWTHeader.alg!,
+  ...JWTHeader
+})
+
+return jwt.sign(key)
+```
+
+```typescript
+async verify(
+  jwt?: string,
+  options?: JWTVerifyOptions
+) {
+  if (!jwt) return false
+
+  try {
+    const data: any = (
+      await (options
+        ? jwtVerify(jwt, key, options)
+        : jwtVerify(jwt, key))
+    ).payload
+
+    // ...
+    return data
+  } catch {
+    return false
+  }
+}
+```
+
+ここで重要なのは、実際の署名検証が `jose` に委譲されている点です。
+`jose` の `jwtVerify()` は `compactVerify()`、さらに `flattenedVerify()` に進み、
+JWT ヘッダの `alg` と鍵の種類を `checkKeyType()` で検査します。
+
+```typescript
+const { alg } = joseHeader
+
+if (typeof alg !== 'string' || !alg) {
+  throw new JWSInvalid('JWS "alg" (Algorithm) Header Parameter missing or invalid')
+}
+
+const algorithms = options && validateAlgorithms('algorithms', options.algorithms)
+
+if (algorithms && !algorithms.has(alg)) {
+  throw new JOSEAlgNotAllowed('"alg" (Algorithm) Header Parameter value not allowed')
+}
+
+// ...
+
+checkKeyType(alg, key, 'verify')
+```
+
+`checkKeyType()` では、HS 系のような対称鍵アルゴリズムと、
+RS/PS/ES/EdDSA 系のような非対称鍵アルゴリズムを分けて扱っています。
+
+```typescript
+const symmetricTypeCheck = (alg: string, key: unknown, usage: Usage) => {
+  if (key instanceof Uint8Array) return
+
+  if (jwk.isJWK(key)) {
+    if (jwk.isSecretJWK(key) && jwkMatchesOp(alg, key, usage)) return
+    throw new TypeError(
+      `JSON Web Key for symmetric algorithms must have JWK "kty" (Key Type) equal to "oct" and the JWK "k" (Key Value) present`,
+    )
+  }
+
+  if (!isKeyLike(key)) {
+    throw new TypeError(
+      invalidKeyInput(alg, key, 'CryptoKey', 'KeyObject', 'JSON Web Key', 'Uint8Array'),
+    )
+  }
+
+  if (key.type !== 'secret') {
+    throw new TypeError(`${tag(key)} instances for symmetric algorithms must be of type "secret"`)
+  }
+}
+
+const asymmetricTypeCheck = (alg: string, key: unknown, usage: Usage) => {
+  if (jwk.isJWK(key)) {
+    switch (usage) {
+      case 'verify':
+        if (jwk.isPublicJWK(key) && jwkMatchesOp(alg, key, usage)) return
+        throw new TypeError(`JSON Web Key for this operation must be a public JWK`)
+    }
+  }
+
+  // ...
+}
+
+export function checkKeyType(alg: string, key: unknown, usage: Usage): void {
+  switch (alg.substring(0, 2)) {
+    case 'HS':
+      symmetricTypeCheck(alg, key, usage)
+      break
+    default:
+      asymmetricTypeCheck(alg, key, usage)
+  }
+}
+```
+
+この実装では、RSA JWK を `HS256` 用の鍵として使おうとすると、
+「対称鍵アルゴリズムの JWK は `kty: "oct"` でなければならない」という検査で拒否されます。
+Hono の脆弱バージョンで起きていたように、
+JWK オブジェクトを `header.alg` に従ってそのまま HMAC 検証に使う、という流れにはなりません。
+
+さらに `jose` の JWKS resolver は、
+`alg` から期待する `kty` を導出してから JWK を絞り込みます。
+
+```typescript
+function getKtyFromAlg(alg: unknown) {
+  switch (typeof alg === 'string' && alg.slice(0, 2)) {
+    case 'RS':
+    case 'PS':
+      return 'RSA'
+    case 'ES':
+      return 'EC'
+    case 'Ed':
+      return 'OKP'
+    case 'ML':
+      return 'AKP'
+    default:
+      throw new JOSENotSupported('Unsupported "alg" value for a JSON Web Key Set')
+  }
+}
+
+async getKey(
+  protectedHeader?: types.JWSHeaderParameters,
+  token?: types.FlattenedJWSInput,
+): Promise<types.CryptoKey> {
+  const { alg, kid } = { ...protectedHeader, ...token?.header }
+  const kty = getKtyFromAlg(alg)
+
+  const candidates = this.#jwks!.keys.filter((jwk) => {
+    let candidate = kty === jwk.kty
+
+    if (candidate && typeof kid === 'string') {
+      candidate = kid === jwk.kid
+    }
+
+    if (candidate && (typeof jwk.alg === 'string' || kty === 'AKP')) {
+      candidate = alg === jwk.alg
+    }
+
+    if (candidate && typeof jwk.use === 'string') {
+      candidate = jwk.use === 'sig'
+    }
+
+    if (candidate && Array.isArray(jwk.key_ops)) {
+      candidate = jwk.key_ops.includes('verify')
+    }
+
+    return candidate
+  })
+
+  // ...
+}
+```
+
+ここで `HS256` のような HS 系アルゴリズムは `getKtyFromAlg()` でサポートされていません。
+`createRemoteJWKSet()` / `createLocalJWKSet()` は、
+基本的に公開鍵 JWKS から署名検証用の公開鍵を解決するための API であり、
+HMAC secret を JWKS から選ぶ用途ではありません。
+
+また `jose` の `JWTVerifyOptions` には `algorithms` オプションがあり、
+未指定時は「使われた鍵・secret に適用可能な alg」が許可されます。
+加えて、`jwtVerify()` では `{ "alg": "none" }` の Unsecured JWT は受け入れないと明記されています。
+
+そのため、Elysia + `@elysiajs/jwt` + `jose` の現行構成では、
+Hono の JWK middleware と同じ種類の問題は見当たりませんでした。
+攻撃者が JWT ヘッダに `HS256` を指定しても、
+RSA JWK や RSA 公開鍵を HMAC secret として使わせる前に、
+`jose` 側の鍵種別チェックまたは JWKS の `kty` 絞り込みで止まります。
+
+### 比較して見えてくること
+
+3 つを比べると、対策の置き場所に違いがあります。
+
+Express 系は、`express-jwt` が `algorithms` を必須にし、
+`jsonwebtoken` が鍵種別と alg の整合性を確認し、
+`jwks-rsa` が JWKS で使える署名アルゴリズムを非対称鍵系に絞っています。
+
+Fastify 系は、`@fastify/jwt` の設定としては `algorithms` が必須ではありません。
+ただし、現行 `fast-jwt` が PEM 鍵を分類し、RSA 公開鍵なら RSA 系 alg に絞るため、
+典型的な RSA→HMAC 混同は成立しにくくなっています。
+それでも、アプリケーション側では `verify.algorithms` を明示するのが望ましいです。
+
+Elysia 系は、`jose` が JOSE/JWT の低レイヤで鍵種別を厳密に扱っています。
+特に JWK/JWKS に関しては、`alg` から期待する `kty` を導出し、
+RSA JWK を HS 系の鍵として使うような経路を作らない設計になっています。
+
+今回の Hono の修正も、方向性としてはこの流れに合っています。
+つまり、
+
+- アプリケーション側が許可アルゴリズムを明示する
+- JWT ヘッダの `alg` を単独では信用しない
+- 鍵種別とアルゴリズムの整合性を見る
+- JWKS では対称鍵アルゴリズムを安易に扱わない
+
+という方針です。
+
+「JWT ライブラリがよしなにやってくれる」ことに期待するのではなく、
+ライブラリ API の形として安全な設定を要求する。
+今回の Hono の修正で `alg` や `allowedAlgorithms` を必須にしたのは、
+この観点からも妥当だったと考えています。
+
 
 # 終わりに
 
