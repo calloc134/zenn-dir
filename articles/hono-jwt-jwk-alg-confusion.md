@@ -28,11 +28,12 @@ published: false
 GHSA-f67f-6cw9-8mq4 (JWT Middleware) と
 GHSA-3vhc-576x-3qv4 (JWK Middleware) の 2 件です。
 
+それぞれ、CVE-2026-22817 と CVE-2026-22818 として登録されています。
+
 https://github.com/honojs/hono/security/advisories/GHSA-f67f-6cw9-8mq4
 https://github.com/honojs/hono/security/advisories/GHSA-3vhc-576x-3qv4
 
-どちらも「アルゴリズム混同攻撃 (Algorithm Confusion Attack)」に起因するもので、
-CVSS スコアはともに 8.2 (High) と評価されています。
+どちらも「アルゴリズム混同攻撃 (Algorithm Confusion Attack)」に起因するものです。
 
 この２つの脆弱性はどちらも、
 
@@ -155,7 +156,7 @@ RFC 7517 には次のように記されています。
 
 > Use of this member is OPTIONAL.
 
-実際に、Microsoft Entra ID / Azure AD の JWKS では `alg` が含まれないキーが確認できます。
+実際に、Microsoft Entra ID / Azure AD の JWKS では `alg` が含まれないケースが存在します。
 また Auth0 はデフォルトでは `alg` を含みますが、Advanced Tenant settings の
 “Include Signing Algorithms in JSON Web Key Set” を無効化すると、
 JWKS から `alg` を削除できます。
