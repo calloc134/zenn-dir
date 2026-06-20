@@ -923,7 +923,7 @@ export const verifyWithJwks = async (
 }
 ```
 
-検証フローは、おおむね次の順序です。
+検証フローを簡易的に示すと、おおむね次の順序です。
 
 ```typescript
 // 1. JWT ヘッダを読む
@@ -944,6 +944,8 @@ if (!options.allowedAlgorithms.includes(header.alg as AsymmetricAlgorithm)) {
   throw new JwtAlgorithmNotAllowed(header.alg, options.allowedAlgorithms)
 }
 
+// ...JWKSから鍵を取得する処理...
+
 // 5. kid で JWK を探す
 const matchingKey = verifyKeys.find((key) => key.kid === header.kid)
 
@@ -952,7 +954,7 @@ if (matchingKey.alg && matchingKey.alg !== header.alg) {
   throw new JwtAlgorithmMismatch(matchingKey.alg, header.alg)
 }
 
-// 7. 検証は header.alg で実行する
+// 7. 検証は header.algを用いて実行する
 return await verify(token, matchingKey, {
   alg: header.alg,
   ...verifyOpts,
@@ -1003,14 +1005,16 @@ payload = await Jwt.verifyWithJwks(
 `verifyWithJwks()` を直接使う側は 
 `allowedAlgorithms: ['RS256']` のように指定する、という API になっています。
 
+なお今までは`alg`を省略できる実装でしたが、
+今回の修正により必須となったため、破壊的な変更となります。
+
 # 自分で実装するときに気をつけるマインド
 
-では、もし仮にJWT/JWK 検証のミドルウェアを利用することになったとき、
-もしくはJWT/JWK 検証のミドルウェアを実装することになったとき、
+では仮に、JWT/JWK 検証のミドルウェアを実装することになったとき、
 今回の問題を踏まえてどんな点に気をつけるべきなのでしょうか？
 ベストプラクティスを見ていきましょう。
 
-## アルゴリズムは必ず明示する
+## アルゴリズムは必ず明示する設計にする
 
 まず前提として、「デフォルトに任せる」実装を避けることが重要です。
 
@@ -1040,9 +1044,9 @@ JWT ヘッダは攻撃者が書き換えられる外部入力です。
 アルゴリズムの決定はアプリケーション側で行い、
 外部入力を利用する際も、許可されたアルゴリズムの範囲内であることを確認してから使うようにしてください。
 
-## JWK の `alg` フィールドを過信しない
+## JWK の `alg` フィールドを予期しない
 
-JWK に `alg` が含まれていても、それを持ってアルゴリズムの妥当性が保証されるわけではありません。
+JWK の `alg` フィールドは、RFC 7517 では任意フィールドとして定義されています。
 `alg` がない JWK も多く存在するため、JWK の `alg` に頼らず、
 アプリケーション側で許可するアルゴリズムを明示的に指定することが重要です。
 
@@ -1051,10 +1055,10 @@ JWK に `alg` が含まれていても、それを持ってアルゴリズムの
 JWTの検証に対称鍵アルゴリズムを使う場合、鍵は公開されるべきではありません。
 
 今回のJWK ミドルウェアは対称鍵も扱える設計となっていましたが、
-公開されている JWKS から対称鍵を取得し、それを用いてJWTを検証するというのは、
-そもそもセキュリティ的に不自然な設計でした。
+公開されている JWKS から対称鍵を取得し、それを用いてJWTを検証するという処理は、
+そもそも不自然であり、セキュリティ的にも好ましくありません。
 
-JWK ミドルウェアを使う場合は非対称鍵アルゴリズムのみを許可するのが好ましいでしょう。
+JWK ミドルウェアでは非対称鍵アルゴリズムのみを許可する実装にするのが望ましいです。
 
 
 ## 他のフレームワーク・ライブラリの対応
