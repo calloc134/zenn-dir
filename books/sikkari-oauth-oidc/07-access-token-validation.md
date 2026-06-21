@@ -37,7 +37,7 @@ Authorization: Bearer ACCESS_TOKEN_VALUE
 リソースサーバは、この `Authorization` ヘッダーからアクセストークンを抽出し、
 検証手順に進みます。
 
-:::
+:::message
 
 `Authorization` ヘッダ以外の送付方法も存在しますが、
 基本的には `Authorization` ヘッダを使用することが推奨されます。
